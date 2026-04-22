@@ -56,6 +56,10 @@ const RANK_LABELS = ['🔥', '    ', '    ', '    ', '    '];
 const CPU_STATUS_PRIORITY = 221667;
 const MEMORY_STATUS_PRIORITY = 221666;
 const DISK_STATUS_PRIORITY = 221665;
+const DISK_REFRESH_FAST_MS = 30 * 1000;
+const DISK_REFRESH_NORMAL_MS = 2 * 60 * 1000;
+const DISK_REFRESH_SLOW_MS = 10 * 60 * 1000;
+const DISK_REFRESH_MAX_MS = 60 * 60 * 1000;
 
 const execFileAsync = promisify(execFile);
 
@@ -78,6 +82,8 @@ let previousDiskWarning = false;
 let refreshInProgress = false;
 let cpuProcessesCommandInProgress = false;
 let memoryProcessesCommandInProgress = false;
+let cachedDiskSample: DiskSample | undefined;
+let nextDiskRefreshAt = 0;
 
 export function activate(context: vscode.ExtensionContext): void {
   cpuStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, CPU_STATUS_PRIORITY);
@@ -135,6 +141,8 @@ function applyConfiguration(): void {
   previousCpuWarning = false;
   previousMemoryWarning = false;
   previousDiskWarning = false;
+  cachedDiskSample = undefined;
+  nextDiskRefreshAt = 0;
   updateCpuTooltip();
   updateMemoryTooltip();
   updateDiskTooltip();
@@ -208,6 +216,7 @@ async function updateStatusBar(): Promise<void> {
     diskStatusBarItem.text = diskStatusText;
     previousDiskStatusText = diskStatusText;
   }
+  updateDiskTooltip(sample.disk);
 
   if (cpuWarning !== previousCpuWarning) {
     cpuStatusBarItem.backgroundColor = cpuBackgroundColor;
@@ -251,7 +260,7 @@ function updateMemoryTooltip(): void {
   );
 }
 
-function updateDiskTooltip(): void {
+function updateDiskTooltip(disk?: DiskSample): void {
   if (!diskStatusBarItem) {
     return;
   }
@@ -264,6 +273,7 @@ function updateDiskTooltip(): void {
       '**Disk**',
       '',
       `Disk target: ${diskTargetPath}`,
+      disk ? `Usage: ${formatStorageUsage(disk.diskUsedBytes, disk.diskTotalBytes)}` : 'Usage: --',
       `Warning threshold: ${formatPercent(thresholds.diskPercent)}`,
     ].join('\n\n'),
   );
@@ -343,6 +353,7 @@ async function showMemoryProcessesQuickPick(topMemoryProcesses: MemoryProcess[])
   });
 }
 
+
 async function readResourceSample(): Promise<ResourceSample> {
   const cpuSnapshot = readCpuSnapshot();
   const cpuPercent = previousCpuSnapshot ? calculateCpuPercent(previousCpuSnapshot, cpuSnapshot) : 0;
@@ -352,7 +363,7 @@ async function readResourceSample(): Promise<ResourceSample> {
   const memoryFreeBytes = os.freemem();
   const memoryUsedBytes = memoryTotalBytes - memoryFreeBytes;
   const memoryPercent = calculateMemoryPercent(memoryUsedBytes, memoryTotalBytes);
-  const disk = await readDiskSample();
+  const disk = await readDiskSampleIfNeeded();
 
   return {
     cpuPercent,
@@ -379,6 +390,51 @@ async function readDiskSample(): Promise<DiskSample | undefined> {
   } catch {
     return undefined;
   }
+}
+
+async function readDiskSampleIfNeeded(): Promise<DiskSample | undefined> {
+  if (cachedDiskSample && Date.now() < nextDiskRefreshAt) {
+    return cachedDiskSample;
+  }
+
+  const previousDiskSample = cachedDiskSample;
+  const nextDiskSample = await readDiskSample();
+
+  if (!nextDiskSample) {
+    nextDiskRefreshAt = Date.now() + DISK_REFRESH_NORMAL_MS;
+    return cachedDiskSample;
+  }
+
+  cachedDiskSample = nextDiskSample;
+  nextDiskRefreshAt = Date.now() + calculateNextDiskRefreshInterval(previousDiskSample, nextDiskSample);
+  return cachedDiskSample;
+}
+
+function calculateNextDiskRefreshInterval(
+  previousDiskSample: DiskSample | undefined,
+  nextDiskSample: DiskSample,
+): number {
+  if (!previousDiskSample || previousDiskSample.diskPath !== nextDiskSample.diskPath) {
+    return DISK_REFRESH_FAST_MS;
+  }
+
+  const usedBytesDelta = Math.abs(nextDiskSample.diskUsedBytes - previousDiskSample.diskUsedBytes);
+  const totalBytes = Math.max(1, nextDiskSample.diskTotalBytes);
+  const usedPercentDelta = (usedBytesDelta / totalBytes) * 100;
+
+  if (usedPercentDelta >= 1 || usedBytesDelta >= 1024 ** 3) {
+    return DISK_REFRESH_FAST_MS;
+  }
+
+  if (usedPercentDelta >= 0.1 || usedBytesDelta >= 100 * 1024 ** 2) {
+    return DISK_REFRESH_NORMAL_MS;
+  }
+
+  if (usedPercentDelta >= 0.01 || usedBytesDelta >= 10 * 1024 ** 2) {
+    return DISK_REFRESH_SLOW_MS;
+  }
+
+  return DISK_REFRESH_MAX_MS;
 }
 
 function getDiskTargetPath(): string {
