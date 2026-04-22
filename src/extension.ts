@@ -264,9 +264,7 @@ function updateDiskTooltip(): void {
       '**Disk**',
       '',
       `Disk target: ${diskTargetPath}`,
-      'Disk usage is shown as disk name plus used percentage.',
-      `Disk warning threshold: ${formatPercent(thresholds.diskPercent)}`,
-      `Platform: ${os.platform()} ${os.arch()}`,
+      `Warning threshold: ${formatPercent(thresholds.diskPercent)}`,
     ].join('\n\n'),
   );
 }
