@@ -1,0 +1,100 @@
+import * as os from 'node:os';
+import { FIGURE_SPACE } from './constants.js';
+import type { CpuSnapshot, CpuProcess, DiskSample } from './types.js';
+
+export function readCpuSnapshot(): CpuSnapshot {
+  return os.cpus().reduce<CpuSnapshot>(
+    (snapshot, cpu) => {
+      const total = Object.values(cpu.times).reduce((sum, time) => sum + time, 0);
+
+      return {
+        idle: snapshot.idle + cpu.times.idle,
+        total: snapshot.total + total,
+      };
+    },
+    { idle: 0, total: 0 },
+  );
+}
+
+export function calculateCpuPercent(previous: CpuSnapshot, current: CpuSnapshot): number {
+  const idleDelta = current.idle - previous.idle;
+  const totalDelta = current.total - previous.total;
+
+  if (totalDelta <= 0) {
+    return 0;
+  }
+
+  return clampPercent(((totalDelta - idleDelta) / totalDelta) * 100);
+}
+
+export function clampPercent(value: number): number {
+  return Math.min(100, Math.max(0, value));
+}
+
+export function calculateMemoryPercent(usedBytes: number, totalBytes: number): number {
+  return totalBytes > 0 ? (usedBytes / totalBytes) * 100 : 0;
+}
+
+export function formatPercent(value: number): string {
+  return `${Math.round(clampPercent(value)).toString().padStart(2, FIGURE_SPACE)}%`;
+}
+
+export function formatBytes(bytes: number): string {
+  if (bytes >= 1024 ** 3) {
+    return `${formatGigabytes(bytes)}GB`;
+  }
+
+  if (bytes >= 1024 ** 2) {
+    return `${(bytes / 1024 ** 2).toFixed(0)}MB`;
+  }
+
+  return `${Math.max(0, bytes).toFixed(0)}B`;
+}
+
+export function formatStorageUsage(usedBytes: number, totalBytes: number): string {
+  return `${formatGigabytes(usedBytes)}GB / ${formatGigabytes(totalBytes)}GB`;
+}
+
+export function formatDiskUsage(disk: DiskSample): string {
+  return `${formatDiskLabel(disk.diskPath)} ${formatPercent(disk.diskPercent)}`;
+}
+
+export function formatDiskLabel(diskPath: string): string {
+  if (/^[A-Za-z]:/.test(diskPath)) {
+    return diskPath.slice(0, 2).toUpperCase();
+  }
+
+  return diskPath || '/';
+}
+
+export function formatGigabytes(bytes: number): string {
+  return (bytes / 1024 ** 3).toFixed(1);
+}
+
+export function formatProcessName(name: string): string {
+  const normalizedName = name.trim().replace(/\s+/g, ' ');
+  const maxLength = 90;
+
+  if (normalizedName.length <= maxLength) {
+    return normalizedName;
+  }
+
+  return `${normalizedName.slice(0, maxLength - 1)}...`;
+}
+
+export function formatProcessCpuPercent(value: number): string {
+  return `${clampPercent(value).toFixed(1)}%`;
+}
+
+export function normalizeTopProcessCpuPercents(processes: CpuProcess[], totalCpuPercent: number): CpuProcess[] {
+  const processTotal = processes.reduce((total, process) => total + Math.max(0, process.cpuPercent), 0);
+
+  if (processTotal <= 0 || totalCpuPercent <= 0) {
+    return processes.map((process) => ({ ...process, cpuPercent: 0 }));
+  }
+
+  return processes.map((process) => ({
+    ...process,
+    cpuPercent: (Math.max(0, process.cpuPercent) / processTotal) * clampPercent(totalCpuPercent),
+  }));
+}
