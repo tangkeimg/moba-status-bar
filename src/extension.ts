@@ -1,4 +1,6 @@
+import { execFile } from 'node:child_process';
 import * as os from 'node:os';
+import { promisify } from 'node:util';
 import checkDiskSpace from 'check-disk-space';
 import * as vscode from 'vscode';
 
@@ -13,6 +15,11 @@ type ResourceSample = {
   memoryUsedBytes: number;
   memoryTotalBytes: number;
   disk?: DiskSample;
+};
+
+type CpuProcess = {
+  name: string;
+  cpuPercent: number;
 };
 
 type DiskSample = {
@@ -35,17 +42,32 @@ const DEFAULT_CPU_WARNING_THRESHOLD_PERCENT = 90;
 const DEFAULT_MEMORY_WARNING_THRESHOLD_PERCENT = 90;
 const DEFAULT_DISK_WARNING_THRESHOLD_PERCENT = 85;
 const FIGURE_SPACE = '\u2007';
+const SHOW_CPU_PROCESSES_COMMAND = 'mobaStatusBar.showCpuProcesses';
+const TOP_CPU_PROCESS_COUNT = 5;
+const RANK_LABELS = ['🔥', '    ', '    ', '    ', '    '];
 
-let statusBarItem: vscode.StatusBarItem | undefined;
+const execFileAsync = promisify(execFile);
+
+let cpuStatusBarItem: vscode.StatusBarItem | undefined;
+let resourceStatusBarItem: vscode.StatusBarItem | undefined;
 let refreshTimer: NodeJS.Timeout | undefined;
 let previousCpuSnapshot: CpuSnapshot | undefined;
-let statusBarVisible = false;
-let previousStatusText: string | undefined;
+let statusBarsVisible = false;
+let previousCpuStatusText: string | undefined;
+let previousResourceStatusText: string | undefined;
+let latestCpuPercent = 0;
+let previousCpuWarning = false;
+let previousResourceWarningLevel: 'none' | 'warning' | 'error' = 'none';
 let refreshInProgress = false;
+let cpuProcessesCommandInProgress = false;
 
 export function activate(context: vscode.ExtensionContext): void {
-  statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-  context.subscriptions.push(statusBarItem);
+  cpuStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 102);
+  resourceStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 101);
+  context.subscriptions.push(cpuStatusBarItem, resourceStatusBarItem);
+  context.subscriptions.push(
+    vscode.commands.registerCommand(SHOW_CPU_PROCESSES_COMMAND, showTopCpuProcesses),
+  );
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
@@ -60,8 +82,10 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void {
   stopRefreshing();
-  statusBarItem?.dispose();
-  statusBarItem = undefined;
+  cpuStatusBarItem?.dispose();
+  resourceStatusBarItem?.dispose();
+  cpuStatusBarItem = undefined;
+  resourceStatusBarItem = undefined;
 }
 
 function applyConfiguration(): void {
@@ -71,14 +95,20 @@ function applyConfiguration(): void {
   stopRefreshing();
 
   if (!enabled) {
-    statusBarItem?.hide();
-    statusBarVisible = false;
+    cpuStatusBarItem?.hide();
+    resourceStatusBarItem?.hide();
+    statusBarsVisible = false;
     return;
   }
 
   previousCpuSnapshot = readCpuSnapshot();
-  previousStatusText = undefined;
-  updateTooltip();
+  previousCpuStatusText = undefined;
+  previousResourceStatusText = undefined;
+  latestCpuPercent = 0;
+  previousCpuWarning = false;
+  previousResourceWarningLevel = 'none';
+  updateCpuTooltip();
+  updateResourceTooltip();
   void updateStatusBar();
 
   const configuredInterval = config.get<number>('refreshIntervalMs', DEFAULT_REFRESH_INTERVAL_MS);
@@ -97,7 +127,7 @@ function stopRefreshing(): void {
 }
 
 async function updateStatusBar(): Promise<void> {
-  if (!statusBarItem) {
+  if (!cpuStatusBarItem || !resourceStatusBarItem) {
     return;
   }
 
@@ -106,43 +136,67 @@ async function updateStatusBar(): Promise<void> {
   }
 
   refreshInProgress = true;
-  const sample = await readResourceSample();
-  refreshInProgress = false;
+  let sample: ResourceSample;
 
-  if (!statusBarItem) {
+  try {
+    sample = await readResourceSample();
+  } finally {
+    refreshInProgress = false;
+  }
+
+  if (!cpuStatusBarItem || !resourceStatusBarItem) {
     return;
   }
 
   const thresholds = readWarningThresholds();
+  latestCpuPercent = sample.cpuPercent;
   const cpuWarning = sample.cpuPercent >= thresholds.cpuPercent;
   const memoryWarning = sample.memoryPercent >= thresholds.memoryPercent;
   const diskWarning = sample.disk ? sample.disk.diskPercent >= thresholds.diskPercent : false;
   const diskText = sample.disk
     ? `  $(archive) ${formatDiskUsage(sample.disk)}`
     : '  $(archive) --';
-  const statusText = `$(chip) ${formatPercent(sample.cpuPercent)}  $(server) ${formatStorageUsage(sample.memoryUsedBytes, sample.memoryTotalBytes)}${diskText}`;
-  const statusBackgroundColor =
-    cpuWarning || memoryWarning
+  const cpuStatusText = `$(chip) ${formatPercent(sample.cpuPercent)}`;
+  const resourceStatusText = `$(server) ${formatStorageUsage(sample.memoryUsedBytes, sample.memoryTotalBytes)}${diskText}`;
+  const cpuBackgroundColor = cpuWarning ? new vscode.ThemeColor('statusBarItem.errorBackground') : undefined;
+  const resourceWarningLevel = memoryWarning ? 'error' : diskWarning ? 'warning' : 'none';
+  const resourceBackgroundColor =
+    memoryWarning
       ? new vscode.ThemeColor('statusBarItem.errorBackground')
       : diskWarning
         ? new vscode.ThemeColor('statusBarItem.warningBackground')
         : undefined;
 
-  if (statusText !== previousStatusText) {
-    statusBarItem.text = statusText;
-    previousStatusText = statusText;
+  if (cpuStatusText !== previousCpuStatusText) {
+    cpuStatusBarItem.text = cpuStatusText;
+    previousCpuStatusText = cpuStatusText;
+  }
+  cpuStatusBarItem.command = SHOW_CPU_PROCESSES_COMMAND;
+
+  if (resourceStatusText !== previousResourceStatusText) {
+    resourceStatusBarItem.text = resourceStatusText;
+    previousResourceStatusText = resourceStatusText;
   }
 
-  statusBarItem.backgroundColor = statusBackgroundColor;
+  if (cpuWarning !== previousCpuWarning) {
+    cpuStatusBarItem.backgroundColor = cpuBackgroundColor;
+    previousCpuWarning = cpuWarning;
+  }
 
-  if (!statusBarVisible) {
-    statusBarItem.show();
-    statusBarVisible = true;
+  if (resourceWarningLevel !== previousResourceWarningLevel) {
+    resourceStatusBarItem.backgroundColor = resourceBackgroundColor;
+    previousResourceWarningLevel = resourceWarningLevel;
+  }
+
+  if (!statusBarsVisible) {
+    cpuStatusBarItem.show();
+    resourceStatusBarItem.show();
+    statusBarsVisible = true;
   }
 }
 
-function updateTooltip(): void {
-  if (!statusBarItem) {
+function updateResourceTooltip(): void {
+  if (!resourceStatusBarItem) {
     return;
   }
 
@@ -154,7 +208,7 @@ function updateTooltip(): void {
   const memoryUsedBytes = memoryTotalBytes - os.freemem();
   const diskTargetPath = getDiskTargetPath();
 
-  statusBarItem.tooltip = new vscode.MarkdownString(
+  resourceStatusBarItem.tooltip = new vscode.MarkdownString(
     [
       '**Moba Status Bar**',
       '',
@@ -170,6 +224,48 @@ function updateTooltip(): void {
   );
 }
 
+function updateCpuTooltip(): void {
+  if (!cpuStatusBarItem) {
+    return;
+  }
+
+  cpuStatusBarItem.tooltip = new vscode.MarkdownString([
+    '**CPU**',
+    '',
+    'Click to collect and show the top CPU processes.',
+  ].join('\n\n'));
+}
+
+async function showTopCpuProcesses(): Promise<void> {
+  if (cpuProcessesCommandInProgress) {
+    return;
+  }
+
+  cpuProcessesCommandInProgress = true;
+
+  try {
+    const topCpuProcesses = await readTopCpuProcesses();
+    await showCpuProcessesQuickPick(topCpuProcesses);
+  } finally {
+    cpuProcessesCommandInProgress = false;
+  }
+}
+
+async function showCpuProcessesQuickPick(topCpuProcesses: CpuProcess[]): Promise<void> {
+  const items =
+    topCpuProcesses.length > 0
+      ? normalizeTopProcessCpuPercents(topCpuProcesses, latestCpuPercent).map((process, index) => ({
+          label: `${RANK_LABELS[index] ?? `${index + 1}.`} ${formatProcessName(process.name)}`,
+          description: formatProcessCpuPercent(process.cpuPercent),
+        }))
+      : [{ label: 'No process data available' }];
+
+  await vscode.window.showQuickPick(items, {
+    title: `Top ${TOP_CPU_PROCESS_COUNT} CPU Processes - CPU ${formatPercent(latestCpuPercent)}`,
+    placeHolder: 'Collected when this list opens.',
+  });
+}
+
 async function readResourceSample(): Promise<ResourceSample> {
   const cpuSnapshot = readCpuSnapshot();
   const cpuPercent = previousCpuSnapshot ? calculateCpuPercent(previousCpuSnapshot, cpuSnapshot) : 0;
@@ -179,13 +275,14 @@ async function readResourceSample(): Promise<ResourceSample> {
   const memoryFreeBytes = os.freemem();
   const memoryUsedBytes = memoryTotalBytes - memoryFreeBytes;
   const memoryPercent = memoryTotalBytes > 0 ? (memoryUsedBytes / memoryTotalBytes) * 100 : 0;
+  const disk = await readDiskSample();
 
   return {
     cpuPercent,
     memoryPercent,
     memoryUsedBytes,
     memoryTotalBytes,
-    disk: await readDiskSample(),
+    disk,
   };
 }
 
@@ -210,6 +307,129 @@ async function readDiskSample(): Promise<DiskSample | undefined> {
 function getDiskTargetPath(): string {
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   return workspaceFolder?.uri.fsPath ?? os.homedir();
+}
+
+async function readTopCpuProcesses(): Promise<CpuProcess[]> {
+  if (process.platform === 'win32') {
+    return readWindowsTopCpuProcesses();
+  }
+
+  return readUnixTopCpuProcesses();
+}
+
+async function readWindowsTopCpuProcesses(): Promise<CpuProcess[]> {
+  try {
+    const { stdout } = await execFileAsync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-Command',
+        [
+          'Get-CimInstance Win32_PerfFormattedData_PerfProc_Process',
+          "Where-Object { $_.Name -ne '_Total' -and $_.Name -ne 'Idle' }",
+          'Sort-Object PercentProcessorTime -Descending',
+          `Select-Object -First ${TOP_CPU_PROCESS_COUNT} Name,IDProcess,PercentProcessorTime`,
+          'ConvertTo-Json -Compress',
+        ].join(' | '),
+      ],
+      { timeout: 1200, windowsHide: true },
+    );
+
+    const parsed = JSON.parse(stdout.trim()) as
+      | { Name?: unknown; IDProcess?: unknown; PercentProcessorTime?: unknown }
+      | Array<{ Name?: unknown; IDProcess?: unknown; PercentProcessorTime?: unknown }>;
+    const rows = Array.isArray(parsed) ? parsed : [parsed];
+
+    return rows
+      .map((row) => ({
+        name: formatWindowsProcessName(row),
+        cpuPercent: typeof row.PercentProcessorTime === 'number' ? row.PercentProcessorTime : 0,
+      }))
+      .filter((row) => row.cpuPercent > 0);
+  } catch {
+    return [];
+  }
+}
+
+async function readUnixTopCpuProcesses(): Promise<CpuProcess[]> {
+  try {
+    const args =
+      process.platform === 'linux'
+        ? ['-ww', '-eo', 'args,pcpu', '--sort=-pcpu']
+        : ['-ww', '-Ao', 'args,pcpu'];
+    const { stdout } = await execFileAsync('ps', args, {
+      timeout: 1200,
+      windowsHide: true,
+    });
+
+    return parsePsProcessRows(stdout);
+  } catch {
+    return [];
+  }
+}
+
+function parsePsProcessRows(stdout: string): CpuProcess[] {
+  const processRows = stdout
+    .trim()
+    .split('\n')
+    .slice(1)
+    .map(parseUnixProcessRow)
+    .filter((processRow): processRow is CpuProcess => Boolean(processRow))
+    .filter((processRow) => processRow.cpuPercent > 0);
+
+  return processRows
+    .filter((processRow) => !isSamplerProcess(processRow.name))
+    .sort((left, right) => right.cpuPercent - left.cpuPercent)
+    .slice(0, TOP_CPU_PROCESS_COUNT);
+}
+
+function parseUnixProcessRow(row: string): CpuProcess | undefined {
+  const match = row.trim().match(/^(.*\S)\s+([0-9]+(?:\.[0-9]+)?)$/);
+
+  if (!match) {
+    return undefined;
+  }
+
+  return {
+    name: match[1],
+    cpuPercent: Number(match[2]),
+  };
+}
+
+function formatWindowsProcessName(row: {
+  Name?: unknown;
+  IDProcess?: unknown;
+  PercentProcessorTime?: unknown;
+}): string {
+  const name = typeof row.Name === 'string' ? row.Name : 'Unknown';
+  const pid = typeof row.IDProcess === 'number' ? row.IDProcess : undefined;
+
+  return pid ? `${name} (${pid})` : name;
+}
+
+function formatProcessName(name: string): string {
+  const normalizedName = name.trim().replace(/\s+/g, ' ');
+  const maxLength = 90;
+
+  if (normalizedName.length <= maxLength) {
+    return normalizedName;
+  }
+
+  return `${normalizedName.slice(0, maxLength - 1)}...`;
+}
+
+function isSamplerProcess(name: string): boolean {
+  const normalizedName = name.trim().toLowerCase();
+
+  return (
+    normalizedName === 'ps' ||
+    normalizedName.startsWith('ps ') ||
+    normalizedName.includes(' pcpu') ||
+    normalizedName === 'powershell.exe' ||
+    normalizedName === 'powershell' ||
+    normalizedName.includes('win32_perfformatteddata_perfproc_process') ||
+    normalizedName.includes('get-ciminstance')
+  );
 }
 
 function readWarningThresholds(): WarningThresholds {
@@ -265,6 +485,23 @@ function clampPercent(value: number): number {
 
 function formatPercent(value: number): string {
   return `${Math.round(clampPercent(value)).toString().padStart(2, FIGURE_SPACE)}%`;
+}
+
+function normalizeTopProcessCpuPercents(processes: CpuProcess[], totalCpuPercent: number): CpuProcess[] {
+  const processTotal = processes.reduce((total, process) => total + Math.max(0, process.cpuPercent), 0);
+
+  if (processTotal <= 0 || totalCpuPercent <= 0) {
+    return processes.map((process) => ({ ...process, cpuPercent: 0 }));
+  }
+
+  return processes.map((process) => ({
+    ...process,
+    cpuPercent: (Math.max(0, process.cpuPercent) / processTotal) * clampPercent(totalCpuPercent),
+  }));
+}
+
+function formatProcessCpuPercent(value: number): string {
+  return `${clampPercent(value).toFixed(1)}%`;
 }
 
 function formatStorageUsage(usedBytes: number, totalBytes: number): string {

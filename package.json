@@ -16,6 +16,12 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "commands": [
+      {
+        "command": "mobaStatusBar.showCpuProcesses",
+        "title": "Moba Status Bar: Show Top CPU Processes"
+      }
+    ],
     "configuration": {
       "title": "Moba Status Bar",
       "properties": {

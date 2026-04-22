@@ -7,7 +7,7 @@ A lightweight VS Code status bar resource monitor inspired by MobaXterm.
 - Shows CPU usage in the VS Code status bar.
 - Shows memory usage in the VS Code status bar.
 - Shows workspace disk usage in the VS Code status bar.
-- Shows detailed CPU, memory, platform, and update-time information in the hover tooltip.
+- Click the CPU status item to collect and show the top 5 CPU processes.
 
 ## Settings
 
