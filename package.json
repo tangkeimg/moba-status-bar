@@ -2,7 +2,7 @@
   "name": "moba-status-bar",
   "displayName": "Moba Status Bar",
   "description": "A lightweight VS Code status bar resource monitor inspired by MobaXterm.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "tangkeimg",
   "license": "MIT",
   "icon": "output.png",
