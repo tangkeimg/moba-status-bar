@@ -1,0 +1,27 @@
+# Moba Status Bar
+
+A lightweight VS Code status bar resource monitor inspired by MobaXterm.
+
+## Features
+
+- Shows CPU usage in the VS Code status bar.
+- Shows memory usage in the VS Code status bar.
+- Shows detailed CPU, memory, platform, and update-time information in the hover tooltip.
+
+## Settings
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `mobaStatusBar.enabled` | `true` | Enable or disable the status bar monitor. |
+| `mobaStatusBar.refreshIntervalMs` | `1000` | Refresh interval in milliseconds. Values below `500` are clamped to `500`. |
+| `mobaStatusBar.cpuWarningThresholdPercent` | `80` | Show a warning background when CPU usage reaches this percentage. |
+| `mobaStatusBar.memoryWarningThresholdPercent` | `90` | Show a warning background when memory usage reaches this percentage. |
+
+## Development
+
+```sh
+npm install
+npm run compile
+```
+
+Press `F5` in VS Code to launch an Extension Development Host.

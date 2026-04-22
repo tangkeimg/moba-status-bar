@@ -1,0 +1,60 @@
+{
+  "name": "moba-status-bar",
+  "displayName": "Moba Status Bar",
+  "description": "A lightweight VS Code status bar resource monitor inspired by MobaXterm.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Moba Status Bar",
+      "properties": {
+        "mobaStatusBar.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable the Moba Status Bar resource monitor."
+        },
+        "mobaStatusBar.refreshIntervalMs": {
+          "type": "number",
+          "default": 1000,
+          "minimum": 500,
+          "description": "How often the CPU and memory status should refresh, in milliseconds."
+        },
+        "mobaStatusBar.cpuWarningThresholdPercent": {
+          "type": "number",
+          "default": 90,
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Show a warning background when CPU usage is at or above this percentage."
+        },
+        "mobaStatusBar.memoryWarningThresholdPercent": {
+          "type": "number",
+          "default": 90,
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Show a warning background when memory usage is at or above this percentage."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.5.4"
+  }
+}
