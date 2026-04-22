@@ -1,4 +1,5 @@
 import * as os from 'node:os';
+import checkDiskSpace from 'check-disk-space';
 import * as vscode from 'vscode';
 
 type CpuSnapshot = {
@@ -11,18 +12,28 @@ type ResourceSample = {
   memoryPercent: number;
   memoryUsedBytes: number;
   memoryTotalBytes: number;
+  disk?: DiskSample;
+};
+
+type DiskSample = {
+  diskPath: string;
+  diskPercent: number;
+  diskUsedBytes: number;
+  diskTotalBytes: number;
 };
 
 type WarningThresholds = {
   cpuPercent: number;
   memoryPercent: number;
+  diskPercent: number;
 };
 
 const CONFIG_SECTION = 'mobaStatusBar';
 const DEFAULT_REFRESH_INTERVAL_MS = 1000;
 const MIN_REFRESH_INTERVAL_MS = 500;
-const DEFAULT_CPU_WARNING_THRESHOLD_PERCENT = 80;
+const DEFAULT_CPU_WARNING_THRESHOLD_PERCENT = 90;
 const DEFAULT_MEMORY_WARNING_THRESHOLD_PERCENT = 90;
+const DEFAULT_DISK_WARNING_THRESHOLD_PERCENT = 85;
 const FIGURE_SPACE = '\u2007';
 
 let statusBarItem: vscode.StatusBarItem | undefined;
@@ -30,6 +41,7 @@ let refreshTimer: NodeJS.Timeout | undefined;
 let previousCpuSnapshot: CpuSnapshot | undefined;
 let statusBarVisible = false;
 let previousStatusText: string | undefined;
+let refreshInProgress = false;
 
 export function activate(context: vscode.ExtensionContext): void {
   statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -67,12 +79,14 @@ function applyConfiguration(): void {
   previousCpuSnapshot = readCpuSnapshot();
   previousStatusText = undefined;
   updateTooltip();
-  updateStatusBar();
+  void updateStatusBar();
 
   const configuredInterval = config.get<number>('refreshIntervalMs', DEFAULT_REFRESH_INTERVAL_MS);
   const refreshIntervalMs = Math.max(MIN_REFRESH_INTERVAL_MS, configuredInterval);
 
-  refreshTimer = setInterval(updateStatusBar, refreshIntervalMs);
+  refreshTimer = setInterval(() => {
+    void updateStatusBar();
+  }, refreshIntervalMs);
 }
 
 function stopRefreshing(): void {
@@ -82,18 +96,37 @@ function stopRefreshing(): void {
   }
 }
 
-function updateStatusBar(): void {
+async function updateStatusBar(): Promise<void> {
   if (!statusBarItem) {
     return;
   }
 
-  const sample = readResourceSample();
+  if (refreshInProgress) {
+    return;
+  }
+
+  refreshInProgress = true;
+  const sample = await readResourceSample();
+  refreshInProgress = false;
+
+  if (!statusBarItem) {
+    return;
+  }
+
   const thresholds = readWarningThresholds();
   const cpuWarning = sample.cpuPercent >= thresholds.cpuPercent;
   const memoryWarning = sample.memoryPercent >= thresholds.memoryPercent;
-  const statusText = `$(chip) ${formatPercent(sample.cpuPercent)}  $(server) ${formatMemoryUsage(sample.memoryUsedBytes, sample.memoryTotalBytes)}`;
+  const diskWarning = sample.disk ? sample.disk.diskPercent >= thresholds.diskPercent : false;
+  const diskText = sample.disk
+    ? `  $(archive) ${formatDiskUsage(sample.disk)}`
+    : '  $(archive) --';
+  const statusText = `$(chip) ${formatPercent(sample.cpuPercent)}  $(server) ${formatStorageUsage(sample.memoryUsedBytes, sample.memoryTotalBytes)}${diskText}`;
   const statusBackgroundColor =
-    cpuWarning || memoryWarning ? new vscode.ThemeColor('statusBarItem.warningBackground') : undefined;
+    cpuWarning || memoryWarning
+      ? new vscode.ThemeColor('statusBarItem.errorBackground')
+      : diskWarning
+        ? new vscode.ThemeColor('statusBarItem.warningBackground')
+        : undefined;
 
   if (statusText !== previousStatusText) {
     statusBarItem.text = statusText;
@@ -119,21 +152,25 @@ function updateTooltip(): void {
   const thresholds = readWarningThresholds();
   const memoryTotalBytes = os.totalmem();
   const memoryUsedBytes = memoryTotalBytes - os.freemem();
+  const diskTargetPath = getDiskTargetPath();
 
   statusBarItem.tooltip = new vscode.MarkdownString(
     [
       '**Moba Status Bar**',
       '',
-      `Memory: ${formatMemoryUsage(memoryUsedBytes, memoryTotalBytes)}`,
+      `Memory: ${formatStorageUsage(memoryUsedBytes, memoryTotalBytes)}`,
+      `Disk target: ${diskTargetPath}`,
+      'Disk usage is shown as disk name plus used percentage.',
       `CPU warning threshold: ${formatPercent(thresholds.cpuPercent)}`,
       `Memory warning threshold: ${formatPercent(thresholds.memoryPercent)}`,
+      `Disk warning threshold: ${formatPercent(thresholds.diskPercent)}`,
       `Platform: ${os.platform()} ${os.arch()}`,
       `Refresh interval: ${refreshIntervalMs} ms`,
     ].join('\n\n'),
   );
 }
 
-function readResourceSample(): ResourceSample {
+async function readResourceSample(): Promise<ResourceSample> {
   const cpuSnapshot = readCpuSnapshot();
   const cpuPercent = previousCpuSnapshot ? calculateCpuPercent(previousCpuSnapshot, cpuSnapshot) : 0;
   previousCpuSnapshot = cpuSnapshot;
@@ -148,7 +185,31 @@ function readResourceSample(): ResourceSample {
     memoryPercent,
     memoryUsedBytes,
     memoryTotalBytes,
+    disk: await readDiskSample(),
   };
+}
+
+async function readDiskSample(): Promise<DiskSample | undefined> {
+  try {
+    const diskSpace = await checkDiskSpace(getDiskTargetPath());
+    const diskTotalBytes = diskSpace.size;
+    const diskUsedBytes = diskSpace.size - diskSpace.free;
+    const diskPercent = diskTotalBytes > 0 ? (diskUsedBytes / diskTotalBytes) * 100 : 0;
+
+    return {
+      diskPath: diskSpace.diskPath,
+      diskPercent,
+      diskUsedBytes,
+      diskTotalBytes,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function getDiskTargetPath(): string {
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+  return workspaceFolder?.uri.fsPath ?? os.homedir();
 }
 
 function readWarningThresholds(): WarningThresholds {
@@ -161,10 +222,15 @@ function readWarningThresholds(): WarningThresholds {
     'memoryWarningThresholdPercent',
     DEFAULT_MEMORY_WARNING_THRESHOLD_PERCENT,
   );
+  const diskPercent = config.get<number>(
+    'diskWarningThresholdPercent',
+    DEFAULT_DISK_WARNING_THRESHOLD_PERCENT,
+  );
 
   return {
     cpuPercent: clampPercent(cpuPercent),
     memoryPercent: clampPercent(memoryPercent),
+    diskPercent: clampPercent(diskPercent),
   };
 }
 
@@ -201,8 +267,20 @@ function formatPercent(value: number): string {
   return `${Math.round(clampPercent(value)).toString().padStart(2, FIGURE_SPACE)}%`;
 }
 
-function formatMemoryUsage(usedBytes: number, totalBytes: number): string {
+function formatStorageUsage(usedBytes: number, totalBytes: number): string {
   return `${formatGigabytes(usedBytes)}GB / ${formatGigabytes(totalBytes)}GB`;
+}
+
+function formatDiskUsage(disk: DiskSample): string {
+  return `${formatDiskLabel(disk.diskPath)} ${formatPercent(disk.diskPercent)}`;
+}
+
+function formatDiskLabel(diskPath: string): string {
+  if (/^[A-Za-z]:/.test(diskPath)) {
+    return diskPath.slice(0, 2).toUpperCase();
+  }
+
+  return diskPath || '/';
 }
 
 function formatGigabytes(bytes: number): string {

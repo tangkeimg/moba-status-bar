@@ -43,6 +43,13 @@
           "minimum": 0,
           "maximum": 100,
           "description": "Show a warning background when memory usage is at or above this percentage."
+        },
+        "mobaStatusBar.diskWarningThresholdPercent": {
+          "type": "number",
+          "default": 85,
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Show a warning background when disk usage is at or above this percentage."
         }
       }
     }
@@ -56,5 +63,8 @@
     "@types/node": "^20.14.10",
     "@types/vscode": "^1.90.0",
     "typescript": "^5.5.4"
+  },
+  "dependencies": {
+    "check-disk-space": "^3.4.0"
   }
 }

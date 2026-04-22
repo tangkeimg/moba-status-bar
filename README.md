@@ -6,6 +6,7 @@ A lightweight VS Code status bar resource monitor inspired by MobaXterm.
 
 - Shows CPU usage in the VS Code status bar.
 - Shows memory usage in the VS Code status bar.
+- Shows workspace disk usage in the VS Code status bar.
 - Shows detailed CPU, memory, platform, and update-time information in the hover tooltip.
 
 ## Settings
@@ -14,8 +15,9 @@ A lightweight VS Code status bar resource monitor inspired by MobaXterm.
 | --- | --- | --- |
 | `mobaStatusBar.enabled` | `true` | Enable or disable the status bar monitor. |
 | `mobaStatusBar.refreshIntervalMs` | `1000` | Refresh interval in milliseconds. Values below `500` are clamped to `500`. |
-| `mobaStatusBar.cpuWarningThresholdPercent` | `80` | Show a warning background when CPU usage reaches this percentage. |
+| `mobaStatusBar.cpuWarningThresholdPercent` | `90` | Show a warning background when CPU usage reaches this percentage. |
 | `mobaStatusBar.memoryWarningThresholdPercent` | `90` | Show a warning background when memory usage reaches this percentage. |
+| `mobaStatusBar.diskWarningThresholdPercent` | `90` | Show a warning background when disk usage reaches this percentage. |
 
 ## Development
 
