@@ -43,7 +43,6 @@ export function createStatusBarManager(): StatusBarManager {
   let previousCpuWarning = false;
   let previousMemoryWarning = false;
   let previousDiskWarning = false;
-  let previousDiskSample: DiskSample | undefined;
   let diskTargetPath = '';
 
   return {
@@ -94,10 +93,7 @@ export function createStatusBarManager(): StatusBarManager {
       if (diskStatusText !== previousDiskStatusText) {
         diskStatusBarItem.text = diskStatusText;
         previousDiskStatusText = diskStatusText;
-      }
-      if (sample.disk !== previousDiskSample) {
         this.updateDiskTooltip(sample.disk);
-        previousDiskSample = sample.disk;
       }
 
       if (cpuWarning !== previousCpuWarning) {
@@ -168,7 +164,6 @@ export function createStatusBarManager(): StatusBarManager {
       previousCpuStatusText = undefined;
       previousMemoryStatusText = undefined;
       previousDiskStatusText = undefined;
-      previousDiskSample = undefined;
       latestCpuPercent = 0;
       latestMemoryPercent = 0;
       latestMemoryUsedBytes = 0;
