@@ -53,6 +53,9 @@ const SHOW_MEMORY_PROCESSES_COMMAND = 'mobaStatusBar.showMemoryProcesses';
 const TOP_CPU_PROCESS_COUNT = 5;
 const TOP_MEMORY_PROCESS_COUNT = 5;
 const RANK_LABELS = ['🔥', '    ', '    ', '    ', '    '];
+const CPU_STATUS_PRIORITY = 221667;
+const MEMORY_STATUS_PRIORITY = 221666;
+const DISK_STATUS_PRIORITY = 221665;
 
 const execFileAsync = promisify(execFile);
 
@@ -77,9 +80,9 @@ let cpuProcessesCommandInProgress = false;
 let memoryProcessesCommandInProgress = false;
 
 export function activate(context: vscode.ExtensionContext): void {
-  cpuStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 102);
-  memoryStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 101);
-  diskStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  cpuStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, CPU_STATUS_PRIORITY);
+  memoryStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, MEMORY_STATUS_PRIORITY);
+  diskStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, DISK_STATUS_PRIORITY);
   context.subscriptions.push(cpuStatusBarItem, memoryStatusBarItem, diskStatusBarItem);
   context.subscriptions.push(
     vscode.commands.registerCommand(SHOW_CPU_PROCESSES_COMMAND, showTopCpuProcesses),
