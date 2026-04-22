@@ -5,6 +5,11 @@
   "version": "0.0.1",
   "publisher": "local",
   "license": "MIT",
+  "icon": "output.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tangkeimg/moba-status-bar"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },
