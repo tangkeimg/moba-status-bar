@@ -22,6 +22,12 @@ type CpuProcess = {
   cpuPercent: number;
 };
 
+type MemoryProcess = {
+  name: string;
+  memoryPercent: number;
+  memoryBytes: number;
+};
+
 type DiskSample = {
   diskPath: string;
   diskPercent: number;
@@ -43,30 +49,41 @@ const DEFAULT_MEMORY_WARNING_THRESHOLD_PERCENT = 90;
 const DEFAULT_DISK_WARNING_THRESHOLD_PERCENT = 85;
 const FIGURE_SPACE = '\u2007';
 const SHOW_CPU_PROCESSES_COMMAND = 'mobaStatusBar.showCpuProcesses';
+const SHOW_MEMORY_PROCESSES_COMMAND = 'mobaStatusBar.showMemoryProcesses';
 const TOP_CPU_PROCESS_COUNT = 5;
+const TOP_MEMORY_PROCESS_COUNT = 5;
 const RANK_LABELS = ['🔥', '    ', '    ', '    ', '    '];
 
 const execFileAsync = promisify(execFile);
 
 let cpuStatusBarItem: vscode.StatusBarItem | undefined;
-let resourceStatusBarItem: vscode.StatusBarItem | undefined;
+let memoryStatusBarItem: vscode.StatusBarItem | undefined;
+let diskStatusBarItem: vscode.StatusBarItem | undefined;
 let refreshTimer: NodeJS.Timeout | undefined;
 let previousCpuSnapshot: CpuSnapshot | undefined;
 let statusBarsVisible = false;
 let previousCpuStatusText: string | undefined;
-let previousResourceStatusText: string | undefined;
+let previousMemoryStatusText: string | undefined;
+let previousDiskStatusText: string | undefined;
 let latestCpuPercent = 0;
+let latestMemoryPercent = 0;
+let latestMemoryUsedBytes = 0;
+let latestMemoryTotalBytes = 0;
 let previousCpuWarning = false;
-let previousResourceWarningLevel: 'none' | 'warning' | 'error' = 'none';
+let previousMemoryWarning = false;
+let previousDiskWarning = false;
 let refreshInProgress = false;
 let cpuProcessesCommandInProgress = false;
+let memoryProcessesCommandInProgress = false;
 
 export function activate(context: vscode.ExtensionContext): void {
   cpuStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 102);
-  resourceStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 101);
-  context.subscriptions.push(cpuStatusBarItem, resourceStatusBarItem);
+  memoryStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 101);
+  diskStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  context.subscriptions.push(cpuStatusBarItem, memoryStatusBarItem, diskStatusBarItem);
   context.subscriptions.push(
     vscode.commands.registerCommand(SHOW_CPU_PROCESSES_COMMAND, showTopCpuProcesses),
+    vscode.commands.registerCommand(SHOW_MEMORY_PROCESSES_COMMAND, showTopMemoryProcesses),
   );
 
   context.subscriptions.push(
@@ -83,9 +100,11 @@ export function activate(context: vscode.ExtensionContext): void {
 export function deactivate(): void {
   stopRefreshing();
   cpuStatusBarItem?.dispose();
-  resourceStatusBarItem?.dispose();
+  memoryStatusBarItem?.dispose();
+  diskStatusBarItem?.dispose();
   cpuStatusBarItem = undefined;
-  resourceStatusBarItem = undefined;
+  memoryStatusBarItem = undefined;
+  diskStatusBarItem = undefined;
 }
 
 function applyConfiguration(): void {
@@ -96,19 +115,26 @@ function applyConfiguration(): void {
 
   if (!enabled) {
     cpuStatusBarItem?.hide();
-    resourceStatusBarItem?.hide();
+    memoryStatusBarItem?.hide();
+    diskStatusBarItem?.hide();
     statusBarsVisible = false;
     return;
   }
 
   previousCpuSnapshot = readCpuSnapshot();
   previousCpuStatusText = undefined;
-  previousResourceStatusText = undefined;
+  previousMemoryStatusText = undefined;
+  previousDiskStatusText = undefined;
   latestCpuPercent = 0;
+  latestMemoryPercent = 0;
+  latestMemoryUsedBytes = 0;
+  latestMemoryTotalBytes = 0;
   previousCpuWarning = false;
-  previousResourceWarningLevel = 'none';
+  previousMemoryWarning = false;
+  previousDiskWarning = false;
   updateCpuTooltip();
-  updateResourceTooltip();
+  updateMemoryTooltip();
+  updateDiskTooltip();
   void updateStatusBar();
 
   const configuredInterval = config.get<number>('refreshIntervalMs', DEFAULT_REFRESH_INTERVAL_MS);
@@ -127,7 +153,7 @@ function stopRefreshing(): void {
 }
 
 async function updateStatusBar(): Promise<void> {
-  if (!cpuStatusBarItem || !resourceStatusBarItem) {
+  if (!cpuStatusBarItem || !memoryStatusBarItem || !diskStatusBarItem) {
     return;
   }
 
@@ -144,28 +170,24 @@ async function updateStatusBar(): Promise<void> {
     refreshInProgress = false;
   }
 
-  if (!cpuStatusBarItem || !resourceStatusBarItem) {
+  if (!cpuStatusBarItem || !memoryStatusBarItem || !diskStatusBarItem) {
     return;
   }
 
   const thresholds = readWarningThresholds();
   latestCpuPercent = sample.cpuPercent;
+  latestMemoryPercent = sample.memoryPercent;
+  latestMemoryUsedBytes = sample.memoryUsedBytes;
+  latestMemoryTotalBytes = sample.memoryTotalBytes;
   const cpuWarning = sample.cpuPercent >= thresholds.cpuPercent;
   const memoryWarning = sample.memoryPercent >= thresholds.memoryPercent;
   const diskWarning = sample.disk ? sample.disk.diskPercent >= thresholds.diskPercent : false;
-  const diskText = sample.disk
-    ? `  $(archive) ${formatDiskUsage(sample.disk)}`
-    : '  $(archive) --';
   const cpuStatusText = `$(chip) ${formatPercent(sample.cpuPercent)}`;
-  const resourceStatusText = `$(server) ${formatStorageUsage(sample.memoryUsedBytes, sample.memoryTotalBytes)}${diskText}`;
+  const memoryStatusText = `$(server) ${formatStorageUsage(sample.memoryUsedBytes, sample.memoryTotalBytes)}`;
+  const diskStatusText = sample.disk ? `$(archive) ${formatDiskUsage(sample.disk)}` : '$(archive) --';
   const cpuBackgroundColor = cpuWarning ? new vscode.ThemeColor('statusBarItem.errorBackground') : undefined;
-  const resourceWarningLevel = memoryWarning ? 'error' : diskWarning ? 'warning' : 'none';
-  const resourceBackgroundColor =
-    memoryWarning
-      ? new vscode.ThemeColor('statusBarItem.errorBackground')
-      : diskWarning
-        ? new vscode.ThemeColor('statusBarItem.warningBackground')
-        : undefined;
+  const memoryBackgroundColor = memoryWarning ? new vscode.ThemeColor('statusBarItem.errorBackground') : undefined;
+  const diskBackgroundColor = diskWarning ? new vscode.ThemeColor('statusBarItem.warningBackground') : undefined;
 
   if (cpuStatusText !== previousCpuStatusText) {
     cpuStatusBarItem.text = cpuStatusText;
@@ -173,9 +195,15 @@ async function updateStatusBar(): Promise<void> {
   }
   cpuStatusBarItem.command = SHOW_CPU_PROCESSES_COMMAND;
 
-  if (resourceStatusText !== previousResourceStatusText) {
-    resourceStatusBarItem.text = resourceStatusText;
-    previousResourceStatusText = resourceStatusText;
+  if (memoryStatusText !== previousMemoryStatusText) {
+    memoryStatusBarItem.text = memoryStatusText;
+    previousMemoryStatusText = memoryStatusText;
+  }
+  memoryStatusBarItem.command = SHOW_MEMORY_PROCESSES_COMMAND;
+
+  if (diskStatusText !== previousDiskStatusText) {
+    diskStatusBarItem.text = diskStatusText;
+    previousDiskStatusText = diskStatusText;
   }
 
   if (cpuWarning !== previousCpuWarning) {
@@ -183,43 +211,59 @@ async function updateStatusBar(): Promise<void> {
     previousCpuWarning = cpuWarning;
   }
 
-  if (resourceWarningLevel !== previousResourceWarningLevel) {
-    resourceStatusBarItem.backgroundColor = resourceBackgroundColor;
-    previousResourceWarningLevel = resourceWarningLevel;
+  if (memoryWarning !== previousMemoryWarning) {
+    memoryStatusBarItem.backgroundColor = memoryBackgroundColor;
+    previousMemoryWarning = memoryWarning;
+  }
+
+  if (diskWarning !== previousDiskWarning) {
+    diskStatusBarItem.backgroundColor = diskBackgroundColor;
+    previousDiskWarning = diskWarning;
   }
 
   if (!statusBarsVisible) {
     cpuStatusBarItem.show();
-    resourceStatusBarItem.show();
+    memoryStatusBarItem.show();
+    diskStatusBarItem.show();
     statusBarsVisible = true;
   }
 }
 
-function updateResourceTooltip(): void {
-  if (!resourceStatusBarItem) {
+function updateMemoryTooltip(): void {
+  if (!memoryStatusBarItem) {
     return;
   }
 
-  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
-  const configuredInterval = config.get<number>('refreshIntervalMs', DEFAULT_REFRESH_INTERVAL_MS);
-  const refreshIntervalMs = Math.max(MIN_REFRESH_INTERVAL_MS, configuredInterval);
   const thresholds = readWarningThresholds();
   const memoryTotalBytes = os.totalmem();
   const memoryUsedBytes = memoryTotalBytes - os.freemem();
+
+  memoryStatusBarItem.tooltip = new vscode.MarkdownString(
+    [
+      '**Memory**',
+      '',
+      `Usage: ${formatPercent(calculateMemoryPercent(memoryUsedBytes, memoryTotalBytes))}`,
+      `Warning threshold: ${formatPercent(thresholds.memoryPercent)}`,
+    ].join('\n\n'),
+  );
+}
+
+function updateDiskTooltip(): void {
+  if (!diskStatusBarItem) {
+    return;
+  }
+
+  const thresholds = readWarningThresholds();
   const diskTargetPath = getDiskTargetPath();
 
-  resourceStatusBarItem.tooltip = new vscode.MarkdownString(
+  diskStatusBarItem.tooltip = new vscode.MarkdownString(
     [
-      '**Moba Status Bar**',
+      '**Disk**',
       '',
-      `Memory: ${formatStorageUsage(memoryUsedBytes, memoryTotalBytes)}`,
       `Disk target: ${diskTargetPath}`,
       'Disk usage is shown as disk name plus used percentage.',
-      `CPU warning threshold: ${formatPercent(thresholds.cpuPercent)}`,
-      `Memory warning threshold: ${formatPercent(thresholds.memoryPercent)}`,
       `Disk warning threshold: ${formatPercent(thresholds.diskPercent)}`,
       `Platform: ${os.platform()} ${os.arch()}`,
-      `Refresh interval: ${refreshIntervalMs} ms`,
     ].join('\n\n'),
   );
 }
@@ -229,10 +273,12 @@ function updateCpuTooltip(): void {
     return;
   }
 
+  const thresholds = readWarningThresholds();
+
   cpuStatusBarItem.tooltip = new vscode.MarkdownString([
     '**CPU**',
     '',
-    'Click to collect and show the top CPU processes.',
+    `Warning threshold: ${formatPercent(thresholds.cpuPercent)}`,
   ].join('\n\n'));
 }
 
@@ -266,6 +312,36 @@ async function showCpuProcessesQuickPick(topCpuProcesses: CpuProcess[]): Promise
   });
 }
 
+async function showTopMemoryProcesses(): Promise<void> {
+  if (memoryProcessesCommandInProgress) {
+    return;
+  }
+
+  memoryProcessesCommandInProgress = true;
+
+  try {
+    const topMemoryProcesses = await readTopMemoryProcesses();
+    await showMemoryProcessesQuickPick(topMemoryProcesses);
+  } finally {
+    memoryProcessesCommandInProgress = false;
+  }
+}
+
+async function showMemoryProcessesQuickPick(topMemoryProcesses: MemoryProcess[]): Promise<void> {
+  const items =
+    topMemoryProcesses.length > 0
+      ? topMemoryProcesses.map((process, index) => ({
+          label: `${RANK_LABELS[index] ?? `${index + 1}.`} ${formatProcessName(process.name)}`,
+          description: `${formatBytes(process.memoryBytes)} · ${formatProcessCpuPercent(process.memoryPercent)}`,
+        }))
+      : [{ label: 'No process data available' }];
+
+  await vscode.window.showQuickPick(items, {
+    title: `Top ${TOP_MEMORY_PROCESS_COUNT} Memory Processes - Memory ${formatBytes(latestMemoryUsedBytes)} · ${formatPercent(latestMemoryPercent)}`,
+    placeHolder: 'Collected when this list opens.',
+  });
+}
+
 async function readResourceSample(): Promise<ResourceSample> {
   const cpuSnapshot = readCpuSnapshot();
   const cpuPercent = previousCpuSnapshot ? calculateCpuPercent(previousCpuSnapshot, cpuSnapshot) : 0;
@@ -274,7 +350,7 @@ async function readResourceSample(): Promise<ResourceSample> {
   const memoryTotalBytes = os.totalmem();
   const memoryFreeBytes = os.freemem();
   const memoryUsedBytes = memoryTotalBytes - memoryFreeBytes;
-  const memoryPercent = memoryTotalBytes > 0 ? (memoryUsedBytes / memoryTotalBytes) * 100 : 0;
+  const memoryPercent = calculateMemoryPercent(memoryUsedBytes, memoryTotalBytes);
   const disk = await readDiskSample();
 
   return {
@@ -317,6 +393,14 @@ async function readTopCpuProcesses(): Promise<CpuProcess[]> {
   return readUnixTopCpuProcesses();
 }
 
+async function readTopMemoryProcesses(): Promise<MemoryProcess[]> {
+  if (process.platform === 'win32') {
+    return readWindowsTopMemoryProcesses();
+  }
+
+  return readUnixTopMemoryProcesses();
+}
+
 async function readWindowsTopCpuProcesses(): Promise<CpuProcess[]> {
   try {
     const { stdout } = await execFileAsync(
@@ -351,6 +435,44 @@ async function readWindowsTopCpuProcesses(): Promise<CpuProcess[]> {
   }
 }
 
+async function readWindowsTopMemoryProcesses(): Promise<MemoryProcess[]> {
+  try {
+    const { stdout } = await execFileAsync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-Command',
+        [
+          'Get-CimInstance Win32_Process',
+          'Sort-Object WorkingSetSize -Descending',
+          `Select-Object -First ${TOP_MEMORY_PROCESS_COUNT} Name,ProcessId,WorkingSetSize`,
+          'ConvertTo-Json -Compress',
+        ].join(' | '),
+      ],
+      { timeout: 1200, windowsHide: true },
+    );
+
+    const parsed = JSON.parse(stdout.trim()) as
+      | { Name?: unknown; ProcessId?: unknown; WorkingSetSize?: unknown }
+      | Array<{ Name?: unknown; ProcessId?: unknown; WorkingSetSize?: unknown }>;
+    const rows = Array.isArray(parsed) ? parsed : [parsed];
+    const totalMemoryBytes = os.totalmem();
+
+    return rows
+      .map((row) => ({
+        name: formatWindowsMemoryProcessName(row),
+        memoryBytes: typeof row.WorkingSetSize === 'number' ? row.WorkingSetSize : 0,
+        memoryPercent:
+          typeof row.WorkingSetSize === 'number' && totalMemoryBytes > 0
+            ? (row.WorkingSetSize / totalMemoryBytes) * 100
+            : 0,
+      }))
+      .filter((row) => row.memoryPercent > 0);
+  } catch {
+    return [];
+  }
+}
+
 async function readUnixTopCpuProcesses(): Promise<CpuProcess[]> {
   try {
     const args =
@@ -363,6 +485,23 @@ async function readUnixTopCpuProcesses(): Promise<CpuProcess[]> {
     });
 
     return parsePsProcessRows(stdout);
+  } catch {
+    return [];
+  }
+}
+
+async function readUnixTopMemoryProcesses(): Promise<MemoryProcess[]> {
+  try {
+    const args =
+      process.platform === 'linux'
+        ? ['-ww', '-eo', 'args,pmem', '--sort=-pmem']
+        : ['-ww', '-Ao', 'args,pmem'];
+    const { stdout } = await execFileAsync('ps', args, {
+      timeout: 1200,
+      windowsHide: true,
+    });
+
+    return parsePsMemoryRows(stdout);
   } catch {
     return [];
   }
@@ -383,6 +522,21 @@ function parsePsProcessRows(stdout: string): CpuProcess[] {
     .slice(0, TOP_CPU_PROCESS_COUNT);
 }
 
+function parsePsMemoryRows(stdout: string): MemoryProcess[] {
+  const processRows = stdout
+    .trim()
+    .split('\n')
+    .slice(1)
+    .map(parseUnixMemoryProcessRow)
+    .filter((processRow): processRow is MemoryProcess => Boolean(processRow))
+    .filter((processRow) => processRow.memoryPercent > 0);
+
+  return processRows
+    .filter((processRow) => !isSamplerProcess(processRow.name))
+    .sort((left, right) => right.memoryPercent - left.memoryPercent)
+    .slice(0, TOP_MEMORY_PROCESS_COUNT);
+}
+
 function parseUnixProcessRow(row: string): CpuProcess | undefined {
   const match = row.trim().match(/^(.*\S)\s+([0-9]+(?:\.[0-9]+)?)$/);
 
@@ -396,6 +550,22 @@ function parseUnixProcessRow(row: string): CpuProcess | undefined {
   };
 }
 
+function parseUnixMemoryProcessRow(row: string): MemoryProcess | undefined {
+  const match = row.trim().match(/^(.*\S)\s+([0-9]+(?:\.[0-9]+)?)$/);
+
+  if (!match) {
+    return undefined;
+  }
+
+  const memoryPercent = Number(match[2]);
+
+  return {
+    name: match[1],
+    memoryPercent,
+    memoryBytes: (memoryPercent / 100) * os.totalmem(),
+  };
+}
+
 function formatWindowsProcessName(row: {
   Name?: unknown;
   IDProcess?: unknown;
@@ -403,6 +573,17 @@ function formatWindowsProcessName(row: {
 }): string {
   const name = typeof row.Name === 'string' ? row.Name : 'Unknown';
   const pid = typeof row.IDProcess === 'number' ? row.IDProcess : undefined;
+
+  return pid ? `${name} (${pid})` : name;
+}
+
+function formatWindowsMemoryProcessName(row: {
+  Name?: unknown;
+  ProcessId?: unknown;
+  WorkingSetSize?: unknown;
+}): string {
+  const name = typeof row.Name === 'string' ? row.Name : 'Unknown';
+  const pid = typeof row.ProcessId === 'number' ? row.ProcessId : undefined;
 
   return pid ? `${name} (${pid})` : name;
 }
@@ -483,6 +664,10 @@ function clampPercent(value: number): number {
   return Math.min(100, Math.max(0, value));
 }
 
+function calculateMemoryPercent(usedBytes: number, totalBytes: number): number {
+  return totalBytes > 0 ? (usedBytes / totalBytes) * 100 : 0;
+}
+
 function formatPercent(value: number): string {
   return `${Math.round(clampPercent(value)).toString().padStart(2, FIGURE_SPACE)}%`;
 }
@@ -506,6 +691,18 @@ function formatProcessCpuPercent(value: number): string {
 
 function formatStorageUsage(usedBytes: number, totalBytes: number): string {
   return `${formatGigabytes(usedBytes)}GB / ${formatGigabytes(totalBytes)}GB`;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 ** 3) {
+    return `${formatGigabytes(bytes)}GB`;
+  }
+
+  if (bytes >= 1024 ** 2) {
+    return `${(bytes / 1024 ** 2).toFixed(0)}MB`;
+  }
+
+  return `${Math.max(0, bytes).toFixed(0)}B`;
 }
 
 function formatDiskUsage(disk: DiskSample): string {

@@ -20,6 +20,10 @@
       {
         "command": "mobaStatusBar.showCpuProcesses",
         "title": "Moba Status Bar: Show Top CPU Processes"
+      },
+      {
+        "command": "mobaStatusBar.showMemoryProcesses",
+        "title": "Moba Status Bar: Show Top Memory Processes"
       }
     ],
     "configuration": {
