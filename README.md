@@ -45,8 +45,6 @@ You can configure Moba Status Bar from VS Code settings.
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `mobaStatusBar.enabled` | `true` | Enable or disable the status bar monitor. |
-| `mobaStatusBar.refreshIntervalMs` | `1000` | Enabled monitor refresh interval in milliseconds. Values below `500` are clamped to `500`. |
 | `mobaStatusBar.cpuEnabled` | `true` | Enable CPU monitoring. When disabled, CPU sampling and CPU trend history are not collected. |
 | `mobaStatusBar.cpuWarningThresholdPercent` | `90` | Highlight the CPU item when CPU usage is at or above this percentage. |
 | `mobaStatusBar.showCpuTrendGraph` | `true` | Show a compact CPU usage trend graph in the status bar. |
@@ -55,12 +53,14 @@ You can configure Moba Status Bar from VS Code settings.
 | `mobaStatusBar.memoryWarningThresholdPercent` | `90` | Highlight the memory item when memory usage is at or above this percentage. |
 | `mobaStatusBar.diskEnabled` | `true` | Enable disk monitoring. When disabled, disk usage is not sampled. |
 | `mobaStatusBar.diskWarningThresholdPercent` | `85` | Highlight the disk item when disk usage is at or above this percentage. |
+| `mobaStatusBar.refreshIntervalMs` | `1000` | Enabled monitor refresh interval in milliseconds. Values below `500` are clamped to `500`. |
+| `mobaStatusBar.alignment` | `right` | Place the status bar items on the `left` or `right` side of the VS Code status bar. |
+| `mobaStatusBar.enabled` | `true` | Enable or disable the status bar monitor. |
 
 Example `settings.json`:
 
 ```json
 {
-  "mobaStatusBar.refreshIntervalMs": 1500,
   "mobaStatusBar.cpuEnabled": true,
   "mobaStatusBar.cpuWarningThresholdPercent": 85,
   "mobaStatusBar.showCpuTrendGraph": true,
@@ -68,7 +68,10 @@ Example `settings.json`:
   "mobaStatusBar.memoryEnabled": true,
   "mobaStatusBar.memoryWarningThresholdPercent": 90,
   "mobaStatusBar.diskEnabled": true,
-  "mobaStatusBar.diskWarningThresholdPercent": 80
+  "mobaStatusBar.diskWarningThresholdPercent": 80,
+  "mobaStatusBar.refreshIntervalMs": 1500,
+  "mobaStatusBar.alignment": "right",
+  "mobaStatusBar.enabled": true
 }
 ```
 
