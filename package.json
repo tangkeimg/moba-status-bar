@@ -43,7 +43,12 @@
           "type": "number",
           "default": 1000,
           "minimum": 500,
-          "description": "How often the CPU and memory status should refresh, in milliseconds."
+          "description": "How often enabled live monitors should refresh, in milliseconds."
+        },
+        "mobaStatusBar.cpuEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable CPU monitoring. When disabled, CPU sampling and CPU trend history are not collected."
         },
         "mobaStatusBar.cpuWarningThresholdPercent": {
           "type": "number",
@@ -64,12 +69,22 @@
           "maximum": 24,
           "description": "Number of samples shown in the CPU trend graph."
         },
+        "mobaStatusBar.memoryEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable memory monitoring. When disabled, memory usage is not sampled."
+        },
         "mobaStatusBar.memoryWarningThresholdPercent": {
           "type": "number",
           "default": 90,
           "minimum": 0,
           "maximum": 100,
           "description": "Show a warning background when memory usage is at or above this percentage."
+        },
+        "mobaStatusBar.diskEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable disk monitoring. When disabled, disk usage is not sampled."
         },
         "mobaStatusBar.diskWarningThresholdPercent": {
           "type": "number",

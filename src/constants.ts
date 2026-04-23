@@ -1,6 +1,9 @@
 export const CONFIG_SECTION = 'mobaStatusBar';
 export const DEFAULT_REFRESH_INTERVAL_MS = 1000;
 export const MIN_REFRESH_INTERVAL_MS = 500;
+export const DEFAULT_CPU_MONITOR_ENABLED = true;
+export const DEFAULT_MEMORY_MONITOR_ENABLED = true;
+export const DEFAULT_DISK_MONITOR_ENABLED = true;
 export const DEFAULT_SHOW_CPU_TREND_GRAPH = true;
 export const DEFAULT_CPU_TREND_GRAPH_LENGTH = 6;
 export const MIN_CPU_TREND_GRAPH_LENGTH = 3;

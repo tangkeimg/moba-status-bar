@@ -8,7 +8,7 @@ import {
   SHOW_MEMORY_PROCESSES_COMMAND,
 } from './constants.js';
 import { readCpuTrendGraphConfig, readWarningThresholds } from './config.js';
-import type { ResourceSample, DiskSample } from './types.js';
+import type { ResourceSample, DiskSample, EnabledMonitors } from './types.js';
 import { formatPercent, formatStorageUsage, formatDiskUsage, calculateMemoryPercent, formatCpuTrendGraph } from './utils.js';
 
 export interface StatusBarManager {
@@ -20,6 +20,7 @@ export interface StatusBarManager {
   updateCpuTooltip(): void;
   updateMemoryTooltip(): void;
   updateDiskTooltip(disk?: DiskSample): void;
+  setEnabledMonitors(enabledMonitors: EnabledMonitors): void;
   setDiskTargetPath(diskTargetPath: string): void;
   getLatestMetrics(): { cpuPercent: number; memoryPercent: number; memoryUsedBytes: number };
   reset(): void;
@@ -45,6 +46,7 @@ export function createStatusBarManager(): StatusBarManager {
   let previousMemoryWarning = false;
   let previousDiskWarning = false;
   let diskTargetPath = '';
+  let enabledMonitors: EnabledMonitors = { cpu: true, memory: true, disk: true };
 
   return {
     get cpuStatusBarItem() {
@@ -65,43 +67,52 @@ export function createStatusBarManager(): StatusBarManager {
 
     update(sample: ResourceSample) {
       const thresholds = readWarningThresholds();
-      latestCpuPercent = sample.cpuPercent;
-      latestMemoryPercent = sample.memoryPercent;
-      latestMemoryUsedBytes = sample.memoryUsedBytes;
-      latestMemoryTotalBytes = sample.memoryTotalBytes;
-      const cpuWarning = sample.cpuPercent >= thresholds.cpuPercent;
-      const memoryWarning = sample.memoryPercent >= thresholds.memoryPercent;
+      const cpuWarning = enabledMonitors.cpu && sample.cpuPercent !== undefined ? sample.cpuPercent >= thresholds.cpuPercent : false;
+      const memoryWarning = enabledMonitors.memory && sample.memoryPercent !== undefined ? sample.memoryPercent >= thresholds.memoryPercent : false;
       const diskWarning = sample.disk ? sample.disk.diskPercent >= thresholds.diskPercent : false;
-      const cpuTrendGraphConfig = readCpuTrendGraphConfig();
-      let cpuTrendGraph = '';
 
-      if (cpuTrendGraphConfig.enabled) {
-        cpuHistory = [...cpuHistory, sample.cpuPercent].slice(-cpuTrendGraphConfig.length);
-        cpuTrendGraph = ` ${formatCpuTrendGraph(cpuHistory, cpuTrendGraphConfig.length)}`;
-      } else if (cpuHistory.length > 0) {
-        cpuHistory = [];
+      if (enabledMonitors.cpu && sample.cpuPercent !== undefined) {
+        latestCpuPercent = sample.cpuPercent;
+        const cpuTrendGraphConfig = readCpuTrendGraphConfig();
+        let cpuTrendGraph = '';
+
+        if (cpuTrendGraphConfig.enabled) {
+          cpuHistory = [...cpuHistory, sample.cpuPercent].slice(-cpuTrendGraphConfig.length);
+          cpuTrendGraph = ` ${formatCpuTrendGraph(cpuHistory, cpuTrendGraphConfig.length)}`;
+        } else if (cpuHistory.length > 0) {
+          cpuHistory = [];
+        }
+
+        const cpuStatusText = `$(chip) ${formatPercent(sample.cpuPercent)}${cpuTrendGraph}`;
+
+        if (cpuStatusText !== previousCpuStatusText) {
+          cpuStatusBarItem.text = cpuStatusText;
+          previousCpuStatusText = cpuStatusText;
+        }
+
+        cpuStatusBarItem.command = SHOW_CPU_PROCESSES_COMMAND;
       }
 
-      const cpuStatusText = `$(chip) ${formatPercent(sample.cpuPercent)}${cpuTrendGraph}`;
-      const memoryStatusText = `$(server) ${formatStorageUsage(sample.memoryUsedBytes, sample.memoryTotalBytes)}`;
-      const diskStatusText = sample.disk ? `$(archive) ${formatDiskUsage(sample.disk)}` : '$(archive) --';
+      if (enabledMonitors.memory && sample.memoryPercent !== undefined && sample.memoryUsedBytes !== undefined && sample.memoryTotalBytes !== undefined) {
+        latestMemoryPercent = sample.memoryPercent;
+        latestMemoryUsedBytes = sample.memoryUsedBytes;
+        latestMemoryTotalBytes = sample.memoryTotalBytes;
+        const memoryStatusText = `$(server) ${formatStorageUsage(sample.memoryUsedBytes, sample.memoryTotalBytes)}`;
+
+        if (memoryStatusText !== previousMemoryStatusText) {
+          memoryStatusBarItem.text = memoryStatusText;
+          previousMemoryStatusText = memoryStatusText;
+        }
+
+        memoryStatusBarItem.command = SHOW_MEMORY_PROCESSES_COMMAND;
+      }
+
+      const diskStatusText = enabledMonitors.disk && sample.disk ? `$(archive) ${formatDiskUsage(sample.disk)}` : '$(archive) --';
       const cpuBackgroundColor = cpuWarning ? new vscode.ThemeColor('statusBarItem.errorBackground') : undefined;
       const memoryBackgroundColor = memoryWarning ? new vscode.ThemeColor('statusBarItem.errorBackground') : undefined;
       const diskBackgroundColor = diskWarning ? new vscode.ThemeColor('statusBarItem.warningBackground') : undefined;
 
-      if (cpuStatusText !== previousCpuStatusText) {
-        cpuStatusBarItem.text = cpuStatusText;
-        previousCpuStatusText = cpuStatusText;
-      }
-      cpuStatusBarItem.command = SHOW_CPU_PROCESSES_COMMAND;
-
-      if (memoryStatusText !== previousMemoryStatusText) {
-        memoryStatusBarItem.text = memoryStatusText;
-        previousMemoryStatusText = memoryStatusText;
-      }
-      memoryStatusBarItem.command = SHOW_MEMORY_PROCESSES_COMMAND;
-
-      if (diskStatusText !== previousDiskStatusText) {
+      if (enabledMonitors.disk && diskStatusText !== previousDiskStatusText) {
         diskStatusBarItem.text = diskStatusText;
         previousDiskStatusText = diskStatusText;
         this.updateDiskTooltip(sample.disk);
@@ -123,9 +134,15 @@ export function createStatusBarManager(): StatusBarManager {
       }
 
       if (!statusBarsVisible) {
-        cpuStatusBarItem.show();
-        memoryStatusBarItem.show();
-        diskStatusBarItem.show();
+        if (enabledMonitors.cpu) {
+          cpuStatusBarItem.show();
+        }
+        if (enabledMonitors.memory) {
+          memoryStatusBarItem.show();
+        }
+        if (enabledMonitors.disk) {
+          diskStatusBarItem.show();
+        }
         statusBarsVisible = true;
       }
     },
@@ -167,6 +184,38 @@ export function createStatusBarManager(): StatusBarManager {
       );
     },
 
+    setEnabledMonitors(nextEnabledMonitors: EnabledMonitors) {
+      enabledMonitors = nextEnabledMonitors;
+
+      if (!enabledMonitors.cpu) {
+        cpuStatusBarItem.hide();
+        cpuStatusBarItem.backgroundColor = undefined;
+        previousCpuStatusText = undefined;
+        latestCpuPercent = 0;
+        cpuHistory = [];
+        previousCpuWarning = false;
+      }
+
+      if (!enabledMonitors.memory) {
+        memoryStatusBarItem.hide();
+        memoryStatusBarItem.backgroundColor = undefined;
+        previousMemoryStatusText = undefined;
+        latestMemoryPercent = 0;
+        latestMemoryUsedBytes = 0;
+        latestMemoryTotalBytes = 0;
+        previousMemoryWarning = false;
+      }
+
+      if (!enabledMonitors.disk) {
+        diskStatusBarItem.hide();
+        diskStatusBarItem.backgroundColor = undefined;
+        previousDiskStatusText = undefined;
+        previousDiskWarning = false;
+      }
+
+      statusBarsVisible = false;
+    },
+
     setDiskTargetPath(path: string) {
       diskTargetPath = path;
     },
@@ -183,6 +232,10 @@ export function createStatusBarManager(): StatusBarManager {
       previousCpuWarning = false;
       previousMemoryWarning = false;
       previousDiskWarning = false;
+      cpuStatusBarItem.backgroundColor = undefined;
+      memoryStatusBarItem.backgroundColor = undefined;
+      diskStatusBarItem.backgroundColor = undefined;
+      statusBarsVisible = false;
     },
 
     getLatestMetrics() {
@@ -194,9 +247,15 @@ export function createStatusBarManager(): StatusBarManager {
     },
 
     show() {
-      cpuStatusBarItem.show();
-      memoryStatusBarItem.show();
-      diskStatusBarItem.show();
+      if (enabledMonitors.cpu) {
+        cpuStatusBarItem.show();
+      }
+      if (enabledMonitors.memory) {
+        memoryStatusBarItem.show();
+      }
+      if (enabledMonitors.disk) {
+        diskStatusBarItem.show();
+      }
       statusBarsVisible = true;
     },
 

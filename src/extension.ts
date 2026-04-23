@@ -1,7 +1,7 @@
 import * as os from 'node:os';
 import * as vscode from 'vscode';
 import { CONFIG_SECTION, SHOW_CPU_PROCESSES_COMMAND, SHOW_MEMORY_PROCESSES_COMMAND } from './constants.js';
-import { isExtensionEnabled, readRefreshIntervalMs } from './config.js';
+import { isExtensionEnabled, readEnabledMonitors, readRefreshIntervalMs } from './config.js';
 import { sampleCpuPercent } from './cpu.js';
 import { sampleMemory } from './memory.js';
 import { createDiskSampler } from './disk.js';
@@ -11,7 +11,7 @@ import type { StatusBarManager } from './statusBar.js';
 import { createCommandHandlers } from './commands.js';
 import type { CommandHandlers } from './commands.js';
 import { readCpuSnapshot } from './utils.js';
-import type { CpuSnapshot, ResourceSample } from './types.js';
+import type { CpuSnapshot, EnabledMonitors, ResourceSample } from './types.js';
 
 let refreshTimer: NodeJS.Timeout | undefined;
 let previousCpuSnapshot: CpuSnapshot | undefined;
@@ -19,6 +19,7 @@ let refreshInProgress = false;
 let statusBarManager: StatusBarManager | undefined;
 let diskSampler: DiskSampler | undefined;
 let commandHandlers: CommandHandlers | undefined;
+let enabledMonitors: EnabledMonitors = { cpu: true, memory: true, disk: true };
 
 export function activate(context: vscode.ExtensionContext): void {
   statusBarManager = createStatusBarManager();
@@ -58,14 +59,33 @@ function applyConfiguration(): void {
     return;
   }
 
-  const diskTargetPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
-  statusBarManager?.setDiskTargetPath(diskTargetPath);
-  previousCpuSnapshot = readCpuSnapshot();
-  diskSampler = createDiskSampler(diskTargetPath);
+  enabledMonitors = readEnabledMonitors();
   statusBarManager?.reset();
-  statusBarManager?.updateCpuTooltip();
-  statusBarManager?.updateMemoryTooltip();
-  statusBarManager?.updateDiskTooltip();
+  statusBarManager?.setEnabledMonitors(enabledMonitors);
+
+  previousCpuSnapshot = enabledMonitors.cpu ? readCpuSnapshot() : undefined;
+  diskSampler = undefined;
+
+  if (enabledMonitors.cpu) {
+    statusBarManager?.updateCpuTooltip();
+  }
+
+  if (enabledMonitors.memory) {
+    statusBarManager?.updateMemoryTooltip();
+  }
+
+  if (enabledMonitors.disk) {
+    const diskTargetPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
+    statusBarManager?.setDiskTargetPath(diskTargetPath);
+    diskSampler = createDiskSampler(diskTargetPath);
+    statusBarManager?.updateDiskTooltip();
+  }
+
+  if (!enabledMonitors.cpu && !enabledMonitors.memory && !enabledMonitors.disk) {
+    statusBarManager?.hide();
+    return;
+  }
+
   void updateStatusBar();
 
   const refreshIntervalMs = readRefreshIntervalMs();
@@ -82,7 +102,7 @@ function stopRefreshing(): void {
 }
 
 async function updateStatusBar(): Promise<void> {
-  if (!statusBarManager || !diskSampler) {
+  if (!statusBarManager) {
     return;
   }
 
@@ -93,23 +113,28 @@ async function updateStatusBar(): Promise<void> {
   refreshInProgress = true;
 
   try {
-    const cpuResult = sampleCpuPercent(previousCpuSnapshot);
-    previousCpuSnapshot = cpuResult.snapshot;
+    const sample: ResourceSample = {};
 
-    const memoryResult = sampleMemory();
-    const disk = await diskSampler.readSample();
-
-    if (!statusBarManager || !diskSampler) {
-      return;
+    if (enabledMonitors.cpu) {
+      const cpuResult = sampleCpuPercent(previousCpuSnapshot);
+      previousCpuSnapshot = cpuResult.snapshot;
+      sample.cpuPercent = cpuResult.cpuPercent;
     }
 
-    const sample: ResourceSample = {
-      cpuPercent: cpuResult.cpuPercent,
-      memoryPercent: memoryResult.memoryPercent,
-      memoryUsedBytes: memoryResult.memoryUsedBytes,
-      memoryTotalBytes: memoryResult.memoryTotalBytes,
-      disk,
-    };
+    if (enabledMonitors.memory) {
+      const memoryResult = sampleMemory();
+      sample.memoryPercent = memoryResult.memoryPercent;
+      sample.memoryUsedBytes = memoryResult.memoryUsedBytes;
+      sample.memoryTotalBytes = memoryResult.memoryTotalBytes;
+    }
+
+    if (enabledMonitors.disk && diskSampler) {
+      sample.disk = await diskSampler.readSample();
+    }
+
+    if (!statusBarManager) {
+      return;
+    }
 
     statusBarManager.update(sample);
   } finally {

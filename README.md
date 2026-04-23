@@ -46,11 +46,14 @@ You can configure Moba Status Bar from VS Code settings.
 | Setting | Default | Description |
 | --- | --- | --- |
 | `mobaStatusBar.enabled` | `true` | Enable or disable the status bar monitor. |
-| `mobaStatusBar.refreshIntervalMs` | `1000` | CPU and memory refresh interval in milliseconds. Values below `500` are clamped to `500`. |
+| `mobaStatusBar.refreshIntervalMs` | `1000` | Enabled monitor refresh interval in milliseconds. Values below `500` are clamped to `500`. |
+| `mobaStatusBar.cpuEnabled` | `true` | Enable CPU monitoring. When disabled, CPU sampling and CPU trend history are not collected. |
 | `mobaStatusBar.cpuWarningThresholdPercent` | `90` | Highlight the CPU item when CPU usage is at or above this percentage. |
 | `mobaStatusBar.showCpuTrendGraph` | `true` | Show a compact CPU usage trend graph in the status bar. |
 | `mobaStatusBar.cpuTrendGraphLength` | `6` | Number of samples shown in the CPU trend graph. |
+| `mobaStatusBar.memoryEnabled` | `true` | Enable memory monitoring. When disabled, memory usage is not sampled. |
 | `mobaStatusBar.memoryWarningThresholdPercent` | `90` | Highlight the memory item when memory usage is at or above this percentage. |
+| `mobaStatusBar.diskEnabled` | `true` | Enable disk monitoring. When disabled, disk usage is not sampled. |
 | `mobaStatusBar.diskWarningThresholdPercent` | `85` | Highlight the disk item when disk usage is at or above this percentage. |
 
 Example `settings.json`:
@@ -58,10 +61,13 @@ Example `settings.json`:
 ```json
 {
   "mobaStatusBar.refreshIntervalMs": 1500,
+  "mobaStatusBar.cpuEnabled": true,
   "mobaStatusBar.cpuWarningThresholdPercent": 85,
   "mobaStatusBar.showCpuTrendGraph": true,
   "mobaStatusBar.cpuTrendGraphLength": 6,
+  "mobaStatusBar.memoryEnabled": true,
   "mobaStatusBar.memoryWarningThresholdPercent": 90,
+  "mobaStatusBar.diskEnabled": true,
   "mobaStatusBar.diskWarningThresholdPercent": 80
 }
 ```
@@ -69,6 +75,7 @@ Example `settings.json`:
 ## Notes
 
 - Disk usage is cached and refreshed less often than CPU and memory to keep the extension lightweight.
+- Disabled monitors are not sampled in the refresh loop.
 - Process lists are collected only when you open them.
 - On Windows, process data is collected through PowerShell/CIM. On macOS and Linux, it is collected through `ps`.
 

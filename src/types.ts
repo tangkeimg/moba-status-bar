@@ -4,10 +4,10 @@ export type CpuSnapshot = {
 };
 
 export type ResourceSample = {
-  cpuPercent: number;
-  memoryPercent: number;
-  memoryUsedBytes: number;
-  memoryTotalBytes: number;
+  cpuPercent?: number;
+  memoryPercent?: number;
+  memoryUsedBytes?: number;
+  memoryTotalBytes?: number;
   disk?: DiskSample;
 };
 
@@ -38,4 +38,10 @@ export type WarningThresholds = {
 export type CpuTrendGraphConfig = {
   enabled: boolean;
   length: number;
+};
+
+export type EnabledMonitors = {
+  cpu: boolean;
+  memory: boolean;
+  disk: boolean;
 };
