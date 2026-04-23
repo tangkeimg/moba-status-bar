@@ -12,7 +12,7 @@ Moba Status Bar keeps CPU, memory, and disk usage visible in the VS Code status 
 
 ## Features
 
-- **CPU usage in the status bar**: shows current system CPU usage with a compact status item.
+- **CPU usage in the status bar**: shows current system CPU usage with a compact rectangular trend graph.
 - **Memory usage in the status bar**: shows used memory and total memory, for example `8.4GB / 16.0GB`.
 - **Workspace disk usage**: shows usage for the disk that contains your first workspace folder. If no workspace is open, it uses your home directory.
 - **Top CPU processes**: click the CPU item or run the command to see the top 5 CPU-consuming processes.
@@ -26,7 +26,7 @@ After installation, the extension starts automatically when VS Code finishes lau
 
 | Item | What it shows | Action |
 | --- | --- | --- |
-| `$(chip)` CPU | Current CPU usage percentage | Click to show top CPU processes |
+| `$(chip)` CPU | Current CPU usage trend and percentage | Click to show top CPU processes |
 | `$(server)` Memory | Used memory / total memory | Click to show top memory processes |
 | `$(archive)` Disk | Workspace disk label and usage percentage | Hover to view target path and usage |
 
@@ -48,6 +48,8 @@ You can configure Moba Status Bar from VS Code settings.
 | `mobaStatusBar.enabled` | `true` | Enable or disable the status bar monitor. |
 | `mobaStatusBar.refreshIntervalMs` | `1000` | CPU and memory refresh interval in milliseconds. Values below `500` are clamped to `500`. |
 | `mobaStatusBar.cpuWarningThresholdPercent` | `90` | Highlight the CPU item when CPU usage is at or above this percentage. |
+| `mobaStatusBar.showCpuTrendGraph` | `true` | Show a compact CPU usage trend graph in the status bar. |
+| `mobaStatusBar.cpuTrendGraphLength` | `6` | Number of samples shown in the CPU trend graph. |
 | `mobaStatusBar.memoryWarningThresholdPercent` | `90` | Highlight the memory item when memory usage is at or above this percentage. |
 | `mobaStatusBar.diskWarningThresholdPercent` | `85` | Highlight the disk item when disk usage is at or above this percentage. |
 
@@ -57,6 +59,8 @@ Example `settings.json`:
 {
   "mobaStatusBar.refreshIntervalMs": 1500,
   "mobaStatusBar.cpuWarningThresholdPercent": 85,
+  "mobaStatusBar.showCpuTrendGraph": true,
+  "mobaStatusBar.cpuTrendGraphLength": 6,
   "mobaStatusBar.memoryWarningThresholdPercent": 90,
   "mobaStatusBar.diskWarningThresholdPercent": 80
 }

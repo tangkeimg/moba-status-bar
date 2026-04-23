@@ -2,7 +2,7 @@
   "name": "moba-status-bar",
   "displayName": "Moba Status Bar",
   "description": "A lightweight VS Code status bar resource monitor inspired by MobaXterm.",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "tangkeimg",
   "license": "MIT",
   "icon": "output.png",
@@ -51,6 +51,18 @@
           "minimum": 0,
           "maximum": 100,
           "description": "Show a warning background when CPU usage is at or above this percentage."
+        },
+        "mobaStatusBar.showCpuTrendGraph": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show a compact CPU usage trend graph in the status bar."
+        },
+        "mobaStatusBar.cpuTrendGraphLength": {
+          "type": "number",
+          "default": 6,
+          "minimum": 3,
+          "maximum": 24,
+          "description": "Number of samples shown in the CPU trend graph."
         },
         "mobaStatusBar.memoryWarningThresholdPercent": {
           "type": "number",

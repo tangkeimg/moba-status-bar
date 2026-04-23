@@ -34,3 +34,8 @@ export type WarningThresholds = {
   memoryPercent: number;
   diskPercent: number;
 };
+
+export type CpuTrendGraphConfig = {
+  enabled: boolean;
+  length: number;
+};

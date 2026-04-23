@@ -2,6 +2,15 @@ import * as os from 'node:os';
 import { FIGURE_SPACE } from './constants.js';
 import type { CpuSnapshot, CpuProcess, DiskSample } from './types.js';
 
+const CPU_TREND_BLOCKS = [
+  '⣀',
+  '⣄',
+  '⣤',
+  '⣦',
+  '⣶',
+  '⣷',
+  '⣿'
+];
 export function readCpuSnapshot(): CpuSnapshot {
   return os.cpus().reduce<CpuSnapshot>(
     (snapshot, cpu) => {
@@ -37,6 +46,20 @@ export function calculateMemoryPercent(usedBytes: number, totalBytes: number): n
 
 export function formatPercent(value: number): string {
   return `${Math.round(clampPercent(value)).toString().padStart(2, FIGURE_SPACE)}%`;
+}
+
+export function formatCpuTrendGraph(samples: number[], length: number): string {
+  const normalizedLength = Math.max(0, Math.round(length));
+  const visibleSamples = samples.slice(-length);
+  const paddedSamples = [
+    ...Array.from({ length: Math.max(0, normalizedLength - visibleSamples.length) }, () => 0),
+    ...visibleSamples,
+  ].slice(-normalizedLength);
+
+  return paddedSamples.map((sample) => {
+    const blockIndex = Math.round((clampPercent(sample) / 100) * (CPU_TREND_BLOCKS.length - 1));
+    return CPU_TREND_BLOCKS[blockIndex];
+  }).join('');
 }
 
 export function formatBytes(bytes: number): string {

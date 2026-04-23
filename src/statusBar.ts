@@ -7,9 +7,9 @@ import {
   SHOW_CPU_PROCESSES_COMMAND,
   SHOW_MEMORY_PROCESSES_COMMAND,
 } from './constants.js';
-import { readWarningThresholds } from './config.js';
+import { readCpuTrendGraphConfig, readWarningThresholds } from './config.js';
 import type { ResourceSample, DiskSample } from './types.js';
-import { formatPercent, formatStorageUsage, formatDiskUsage, calculateMemoryPercent } from './utils.js';
+import { formatPercent, formatStorageUsage, formatDiskUsage, calculateMemoryPercent, formatCpuTrendGraph } from './utils.js';
 
 export interface StatusBarManager {
   readonly cpuStatusBarItem: vscode.StatusBarItem;
@@ -40,6 +40,7 @@ export function createStatusBarManager(): StatusBarManager {
   let latestMemoryPercent = 0;
   let latestMemoryUsedBytes = 0;
   let latestMemoryTotalBytes = 0;
+  let cpuHistory: number[] = [];
   let previousCpuWarning = false;
   let previousMemoryWarning = false;
   let previousDiskWarning = false;
@@ -71,7 +72,17 @@ export function createStatusBarManager(): StatusBarManager {
       const cpuWarning = sample.cpuPercent >= thresholds.cpuPercent;
       const memoryWarning = sample.memoryPercent >= thresholds.memoryPercent;
       const diskWarning = sample.disk ? sample.disk.diskPercent >= thresholds.diskPercent : false;
-      const cpuStatusText = `$(chip) ${formatPercent(sample.cpuPercent)}`;
+      const cpuTrendGraphConfig = readCpuTrendGraphConfig();
+      let cpuTrendGraph = '';
+
+      if (cpuTrendGraphConfig.enabled) {
+        cpuHistory = [...cpuHistory, sample.cpuPercent].slice(-cpuTrendGraphConfig.length);
+        cpuTrendGraph = ` ${formatCpuTrendGraph(cpuHistory, cpuTrendGraphConfig.length)}`;
+      } else if (cpuHistory.length > 0) {
+        cpuHistory = [];
+      }
+
+      const cpuStatusText = `$(chip) ${formatPercent(sample.cpuPercent)}${cpuTrendGraph}`;
       const memoryStatusText = `$(server) ${formatStorageUsage(sample.memoryUsedBytes, sample.memoryTotalBytes)}`;
       const diskStatusText = sample.disk ? `$(archive) ${formatDiskUsage(sample.disk)}` : '$(archive) --';
       const cpuBackgroundColor = cpuWarning ? new vscode.ThemeColor('statusBarItem.errorBackground') : undefined;
@@ -168,6 +179,7 @@ export function createStatusBarManager(): StatusBarManager {
       latestMemoryPercent = 0;
       latestMemoryUsedBytes = 0;
       latestMemoryTotalBytes = 0;
+      cpuHistory = [];
       previousCpuWarning = false;
       previousMemoryWarning = false;
       previousDiskWarning = false;
