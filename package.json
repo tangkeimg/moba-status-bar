@@ -54,7 +54,7 @@
         },
         "mobaStatusBar.showCpuTrendGraph": {
           "type": "boolean",
-          "default": false,
+          "default": true,
           "description": "Show a compact CPU usage trend graph in the status bar."
         },
         "mobaStatusBar.cpuTrendGraphLength": {
