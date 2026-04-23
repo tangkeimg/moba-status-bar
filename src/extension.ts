@@ -59,6 +59,7 @@ function applyConfiguration(): void {
     return;
   }
 
+  statusBarManager?.createItems();
   enabledMonitors = readEnabledMonitors();
   statusBarManager?.reset();
   statusBarManager?.setEnabledMonitors(enabledMonitors);

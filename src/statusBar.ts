@@ -4,10 +4,13 @@ import {
   CPU_STATUS_PRIORITY,
   MEMORY_STATUS_PRIORITY,
   DISK_STATUS_PRIORITY,
+  CPU_STATUS_PRIORITY_LEFT,
+  MEMORY_STATUS_PRIORITY_LEFT,
+  DISK_STATUS_PRIORITY_LEFT,
   SHOW_CPU_PROCESSES_COMMAND,
   SHOW_MEMORY_PROCESSES_COMMAND,
 } from './constants.js';
-import { readCpuTrendGraphConfig, readWarningThresholds } from './config.js';
+import { readAlignment, readCpuTrendGraphConfig, readWarningThresholds } from './config.js';
 import type { ResourceSample, DiskSample, EnabledMonitors } from './types.js';
 import { formatPercent, formatStorageUsage, formatDiskUsage, calculateMemoryPercent, formatCpuTrendGraph } from './utils.js';
 
@@ -47,6 +50,13 @@ export function createStatusBarManager(): StatusBarManager {
   let previousDiskWarning = false;
   let diskTargetPath = '';
   let enabledMonitors: EnabledMonitors = { cpu: true, memory: true, disk: true };
+  let currentAlignment: vscode.StatusBarAlignment | undefined;
+
+  function disposeItems(): void {
+    cpuStatusBarItem?.dispose();
+    memoryStatusBarItem?.dispose();
+    diskStatusBarItem?.dispose();
+  }
 
   return {
     get cpuStatusBarItem() {
@@ -60,9 +70,21 @@ export function createStatusBarManager(): StatusBarManager {
     },
 
     createItems() {
-      cpuStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, CPU_STATUS_PRIORITY);
-      memoryStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, MEMORY_STATUS_PRIORITY);
-      diskStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, DISK_STATUS_PRIORITY);
+      const nextAlignment = readAlignment();
+
+      if (currentAlignment === nextAlignment) {
+        return;
+      }
+
+      disposeItems();
+      currentAlignment = nextAlignment;
+      cpuStatusBarItem = vscode.window.createStatusBarItem(nextAlignment,
+        nextAlignment == vscode.StatusBarAlignment.Right ? CPU_STATUS_PRIORITY : CPU_STATUS_PRIORITY_LEFT);
+      memoryStatusBarItem = vscode.window.createStatusBarItem(nextAlignment,
+        nextAlignment == vscode.StatusBarAlignment.Right ? MEMORY_STATUS_PRIORITY : MEMORY_STATUS_PRIORITY_LEFT);
+      diskStatusBarItem = vscode.window.createStatusBarItem(nextAlignment,
+        nextAlignment == vscode.StatusBarAlignment.Right ? DISK_STATUS_PRIORITY : DISK_STATUS_PRIORITY_LEFT);
+      statusBarsVisible = false;
     },
 
     update(sample: ResourceSample) {
@@ -267,9 +289,7 @@ export function createStatusBarManager(): StatusBarManager {
     },
 
     dispose() {
-      cpuStatusBarItem.dispose();
-      memoryStatusBarItem.dispose();
-      diskStatusBarItem.dispose();
+      disposeItems();
     },
   };
 }

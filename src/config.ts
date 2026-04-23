@@ -11,6 +11,7 @@ import {
   MAX_CPU_TREND_GRAPH_LENGTH,
   DEFAULT_MEMORY_MONITOR_ENABLED,
   DEFAULT_REFRESH_INTERVAL_MS,
+  DEFAULT_ALIGNMENT,
   MIN_CPU_TREND_GRAPH_LENGTH,
   MIN_REFRESH_INTERVAL_MS,
 } from './constants.js';
@@ -34,6 +35,12 @@ export function readRefreshIntervalMs(): number {
   const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
   const configuredInterval = config.get<number>('refreshIntervalMs', DEFAULT_REFRESH_INTERVAL_MS);
   return Math.max(MIN_REFRESH_INTERVAL_MS, configuredInterval);
+}
+
+export function readAlignment(): vscode.StatusBarAlignment {
+  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+  const alignment = config.get<'left' | 'right'>('alignment', DEFAULT_ALIGNMENT);
+  return alignment == 'right' ? vscode.StatusBarAlignment.Right : vscode.StatusBarAlignment.Left;
 }
 
 export function readCpuTrendGraphConfig(): CpuTrendGraphConfig {

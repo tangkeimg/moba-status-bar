@@ -2,7 +2,7 @@
     "name": "moba-status-bar",
     "displayName": "Moba Status Bar",
     "description": "A lightweight VS Code status bar resource monitor inspired by MobaXterm.",
-    "version": "0.0.4",
+    "version": "0.0.5",
     "publisher": "tangkeimg",
     "license": "MIT",
     "icon": "output.png",
@@ -107,10 +107,17 @@
                     "order": 8,
                     "description": "How often enabled live monitors should refresh, in milliseconds."
                 },
+                "mobaStatusBar.alignment": {
+                    "type": "string",
+                    "default": "right",
+                    "enum": ["left", "right"],
+                    "order": 9,
+                    "description": "Alignment of the Moba Status Bar in the status bar."
+                },
                 "mobaStatusBar.enabled": {
                     "type": "boolean",
                     "default": true,
-                    "order": 9,
+                    "order": 10,
                     "description": "Enable the Moba Status Bar resource monitor."
                 }
             }
