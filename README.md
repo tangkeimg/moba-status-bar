@@ -1,8 +1,11 @@
+![Version](https://img.shields.io/visual-studio-marketplace/v/tangkeimg.moba-status-bar)
+![Installs](https://img.shields.io/visual-studio-marketplace/i/tangkeimg.moba-status-bar)
+![License](https://img.shields.io/badge/license-MIT-blue)
 # Moba Status Bar
 
-A lightweight VS Code status bar resource monitor inspired by MobaXterm.
+CPU, memory, and disk usage monitor with a compact trend graph in the VS Code status bar.
 
-Moba Status Bar keeps CPU, memory, and disk usage visible in the VS Code status bar, so you can notice resource pressure without leaving your editor.
+Keep system resource usage visible at all times without leaving your editor. Moba Status Bar shows live CPU, memory, and disk usage directly in the status bar, with a built-in trend graph and one-click access to top resource-consuming processes.
 
 [View on Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=tangkeimg.moba-status-bar)
 
@@ -10,9 +13,24 @@ Moba Status Bar keeps CPU, memory, and disk usage visible in the VS Code status 
 
 ![Moba Status Bar preview](./pic.png)
 
+## Why Moba Status Bar?
+
+- **Live CPU usage with trend graph** directly in the status bar
+- **Memory usage at a glance**
+- **Disk usage for current workspace**
+- **One-click process inspection** (CPU & memory)
+- **Automatic warning highlights** when usage is high
+- **Lightweight and configurable**
+
+## Quick Start
+
+Install the extension and CPU, memory, and disk usage will appear automatically in the status bar.
+
+No setup required. Customize behavior later in Settings if needed.
+
 ## Features
 
-- **CPU usage in the status bar**: shows current system CPU usage with a compact rectangular trend graph.
+- **CPU usage with trend graph**: shows real-time CPU usage with a compact trend graph in the status bar.
 - **Memory usage in the status bar**: shows used memory and total memory, for example `8.4GB / 16.0GB`.
 - **Workspace disk usage**: shows usage for the disk that contains your first workspace folder. If no workspace is open, it uses your home directory.
 - **Top CPU processes**: click the CPU item or run the command to see the top 5 CPU-consuming processes.
