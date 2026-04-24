@@ -14,7 +14,7 @@
     "cpu usage",
     "memory usage"
   ],
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "tangkeimg",
   "license": "MIT",
   "icon": "output.png",
