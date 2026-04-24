@@ -28,23 +28,43 @@ export function createCommandHandlers(
       }
 
       cpuProcessesCommandInProgress = true;
+      const { cpuPercent } = getLatestMetrics();
+      const quickPick = vscode.window.createQuickPick();
+      let quickPickDisposed = false;
+      quickPick.title = `Top ${TOP_CPU_PROCESS_COUNT} CPU Processes - CPU ${formatPercent(cpuPercent)}`;
+      quickPick.placeholder = 'Collecting process data...';
+      quickPick.busy = true;
+      quickPick.items = [{ label: 'Collecting process data...' }];
+      quickPick.onDidHide(() => {
+        quickPickDisposed = true;
+        quickPick.dispose();
+      });
+      quickPick.show();
 
       try {
         const topCpuProcesses = await readTopCpuProcesses();
-        const { cpuPercent } = getLatestMetrics();
+        const { cpuPercent: latestCpuPercent } = getLatestMetrics();
+
+        if (quickPickDisposed) {
+          return;
+        }
+
         const items =
           topCpuProcesses.length > 0
-            ? normalizeTopProcessCpuPercents(topCpuProcesses, cpuPercent).map((process, index) => ({
+            ? normalizeTopProcessCpuPercents(topCpuProcesses, latestCpuPercent).map((process, index) => ({
                 label: `${RANK_LABELS[index] ?? `${index + 1}.`} ${formatProcessName(process.name)}`,
                 description: formatProcessCpuPercent(process.cpuPercent),
               }))
             : [{ label: 'No process data available' }];
 
-        await vscode.window.showQuickPick(items, {
-          title: `Top ${TOP_CPU_PROCESS_COUNT} CPU Processes - CPU ${formatPercent(cpuPercent)}`,
-          placeHolder: 'Collected when this list opens.',
-        });
+        quickPick.title = `Top ${TOP_CPU_PROCESS_COUNT} CPU Processes - CPU ${formatPercent(latestCpuPercent)}`;
+        quickPick.placeholder = 'Collected when this list opens.';
+        quickPick.items = items;
       } finally {
+        if (!quickPickDisposed) {
+          quickPick.busy = false;
+        }
+
         cpuProcessesCommandInProgress = false;
       }
     },

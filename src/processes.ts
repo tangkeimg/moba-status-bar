@@ -23,6 +23,16 @@ export async function readTopMemoryProcesses(): Promise<MemoryProcess[]> {
 }
 
 async function readWindowsTopCpuProcesses(): Promise<CpuProcess[]> {
+  const perfCounterRows = await readWindowsPerfCounterTopCpuProcesses();
+
+  if (perfCounterRows.length > 0) {
+    return perfCounterRows;
+  }
+
+  return readWindowsSampledTopCpuProcesses();
+}
+
+async function readWindowsPerfCounterTopCpuProcesses(): Promise<CpuProcess[]> {
   try {
     const { stdout } = await execFileAsync(
       'powershell.exe',
@@ -40,20 +50,70 @@ async function readWindowsTopCpuProcesses(): Promise<CpuProcess[]> {
       { timeout: 1200, windowsHide: true },
     );
 
-    const parsed = JSON.parse(stdout.trim()) as
-      | { Name?: unknown; IDProcess?: unknown; PercentProcessorTime?: unknown }
-      | Array<{ Name?: unknown; IDProcess?: unknown; PercentProcessorTime?: unknown }>;
-    const rows = Array.isArray(parsed) ? parsed : [parsed];
-
-    return rows
+    return parseJsonRows<{ Name?: unknown; IDProcess?: unknown; PercentProcessorTime?: unknown }>(stdout)
       .map((row) => ({
         name: formatWindowsProcessName(row),
         cpuPercent: typeof row.PercentProcessorTime === 'number' ? row.PercentProcessorTime : 0,
       }))
-      .filter((row) => row.cpuPercent > 0);
+      .filter((row) => row.cpuPercent > 0)
+      .filter((row) => !isSamplerProcess(row.name))
+      .sort((left, right) => right.cpuPercent - left.cpuPercent)
+      .slice(0, TOP_CPU_PROCESS_COUNT);
   } catch {
     return [];
   }
+}
+
+async function readWindowsSampledTopCpuProcesses(): Promise<CpuProcess[]> {
+  try {
+    const sampleLimit = TOP_CPU_PROCESS_COUNT * 3;
+    const { stdout } = await execFileAsync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-Command',
+        [
+          '$logicalCpuCount = [Math]::Max(1, [Environment]::ProcessorCount)',
+          '$firstSample = @{}',
+          'Get-Process | ForEach-Object { if ($null -ne $_.CPU) { $firstSample[$_.Id] = [pscustomobject]@{ Name = $_.ProcessName; CPU = [double]$_.CPU } } }',
+          '$sampleStart = Get-Date',
+          'Start-Sleep -Milliseconds 600',
+          '$elapsedSeconds = [Math]::Max(0.001, ((Get-Date) - $sampleStart).TotalSeconds)',
+          '$rows = Get-Process | ForEach-Object { $previous = $firstSample[$_.Id]; if ($null -ne $previous -and $null -ne $_.CPU) { $delta = [double]$_.CPU - [double]$previous.CPU; if ($delta -gt 0) { [pscustomobject]@{ Name = $_.ProcessName; IDProcess = $_.Id; PercentProcessorTime = (($delta / $elapsedSeconds / $logicalCpuCount) * 100) } } } }',
+          `$rows | Sort-Object PercentProcessorTime -Descending | Select-Object -First ${sampleLimit} Name,IDProcess,PercentProcessorTime | ConvertTo-Json -Compress`,
+        ].join('; '),
+      ],
+      { timeout: 6000, windowsHide: true },
+    );
+
+    return parseJsonRows<{ Name?: unknown; IDProcess?: unknown; PercentProcessorTime?: unknown }>(stdout)
+      .map((row) => ({
+        name: formatWindowsProcessName(row),
+        cpuPercent: typeof row.PercentProcessorTime === 'number' ? row.PercentProcessorTime : 0,
+      }))
+      .filter((row) => row.cpuPercent > 0)
+      .filter((row) => !isSamplerProcess(row.name))
+      .sort((left, right) => right.cpuPercent - left.cpuPercent)
+      .slice(0, TOP_CPU_PROCESS_COUNT);
+  } catch {
+    return [];
+  }
+}
+
+function parseJsonRows<T>(stdout: string): T[] {
+  const trimmedStdout = stdout.trim();
+
+  if (!trimmedStdout) {
+    return [];
+  }
+
+  const parsed = JSON.parse(trimmedStdout) as T | T[] | null;
+
+  if (!parsed) {
+    return [];
+  }
+
+  return Array.isArray(parsed) ? parsed : [parsed];
 }
 
 async function readWindowsTopMemoryProcesses(): Promise<MemoryProcess[]> {
@@ -218,6 +278,12 @@ function isSamplerProcess(name: string): boolean {
     normalizedName.includes(' pcpu') ||
     normalizedName === 'powershell.exe' ||
     normalizedName === 'powershell' ||
+    normalizedName.startsWith('powershell ') ||
+    normalizedName.startsWith('powershell(') ||
+    normalizedName === 'pwsh.exe' ||
+    normalizedName === 'pwsh' ||
+    normalizedName.startsWith('pwsh ') ||
+    normalizedName.startsWith('pwsh(') ||
     normalizedName.includes('win32_perfformatteddata_perfproc_process') ||
     normalizedName.includes('get-ciminstance')
   );
