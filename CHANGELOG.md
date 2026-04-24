@@ -2,6 +2,12 @@
 
 All notable changes to the "Moba Status Bar" extension will be documented in this file.
 
+## [0.1.2] - 2026-04-25
+
+### Changed
+
+- Improved Top CPU Processes and Top Memory Processes on Unix-like systems by parsing process IDs from `ps` output and showing them alongside process names.
+
 ## [0.1.1] - 2026-04-24
 
 ### Fixed
