@@ -1,6 +1,8 @@
 ![Version](https://img.shields.io/visual-studio-marketplace/v/tangkeimg.moba-status-bar)
 ![Installs](https://img.shields.io/visual-studio-marketplace/i/tangkeimg.moba-status-bar)
 ![License](https://img.shields.io/badge/license-MIT-blue)
+[![OpenVSX Downloads](https://img.shields.io/open-vsx/dt/tangkeimg/moba-status-bar)](https://open-vsx.org/extension/tangkeimg/moba-status-bar)
+
 # Moba Status Bar
 
 CPU, memory, and disk usage monitor with a compact trend graph in the VS Code status bar.
