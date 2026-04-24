@@ -14,7 +14,17 @@ import {
 } from './constants.js';
 import { readAlignment, readCpuTrendGraphConfig, readWarningThresholds } from './config.js';
 import type { ResourceSample, DiskSample, EnabledMonitors, GpuAggregateSample, GpuDeviceSample } from './types.js';
-import { formatPercent, formatPrecisePercent, formatStorageUsage, formatCompactStorageUsage, formatDiskUsage, calculateMemoryPercent, formatCpuTrendGraph, formatBytes } from './utils.js';
+import {
+  formatPercent,
+  formatPrecisePercent,
+  formatStatusBarPrecisePercent,
+  formatStorageUsage,
+  formatCompactStorageUsage,
+  formatDiskUsage,
+  calculateMemoryPercent,
+  formatCpuTrendGraph,
+  formatBytes,
+} from './utils.js';
 
 export interface StatusBarManager {
   readonly cpuStatusBarItem: vscode.StatusBarItem;
@@ -148,7 +158,7 @@ export function createStatusBarManager(): StatusBarManager {
         latestGpu = sample.gpu;
 
         if (sample.gpu) {
-          const gpuStatusText = `$(device-desktop) ${formatPrecisePercent(sample.gpu.aggregateUtilizationPercent)}${formatAggregateGpuPanelMemory(sample.gpu)}`;
+          const gpuStatusText = `$(device-desktop) ${formatStatusBarPrecisePercent(sample.gpu.aggregateUtilizationPercent)}${formatAggregateGpuPanelMemory(sample.gpu)}`;
 
           if (gpuStatusText !== previousGpuStatusText) {
             gpuStatusBarItem.text = gpuStatusText;

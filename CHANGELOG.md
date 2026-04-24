@@ -6,7 +6,7 @@ All notable changes to the "Moba Status Bar" extension will be documented in thi
 
 ### Added
 
-- Added Windows GPU detection using GPU Engine and GPU Adapter Memory performance counters, including multi-GPU status and VRAM data when available.
+- Added GPU monitoring backends for Windows and Linux, including multi-GPU status and VRAM data when available.
 
 ### Changed
 
@@ -15,8 +15,9 @@ All notable changes to the "Moba Status Bar" extension will be documented in thi
 ### Fixed
 
 - Hardened GPU fallback handling so backend detection failures, Linux GPU command failures, macOS unsupported telemetry, or Windows GPU metadata errors fall back cleanly instead of surfacing refresh errors.
+- Fixed GPU status bar text jitter when utilization moved from a single-digit value to a double-digit value.
 
-## [0.1.2] - 2026-04-25
+## [0.1.2] - 2026-04-24
 
 ### Changed
 

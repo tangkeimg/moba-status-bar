@@ -17,7 +17,7 @@ Keep system resource usage visible at all times without leaving your editor. Mob
 ## Why Moba Status Bar?
 
 - **Live CPU usage with trend graph** directly in the status bar
-- **Windows GPU usage detection with multi-GPU tooltip**
+- **GPU usage with multi-GPU tooltip**
 - **Memory usage at a glance**
 - **Disk usage for current workspace**
 - **One-click process inspection** (CPU & memory)
@@ -33,7 +33,7 @@ No setup required. Customize behavior later in Settings if needed.
 ## Features
 
 - **CPU usage with trend graph**: shows real-time CPU usage with a compact trend graph in the status bar.
-- **GPU usage in the status bar**: shows the busiest GPU usage in a single compact item and includes VRAM usage when available. Windows GPU detection is supported through native performance counters, while the tooltip expands all detected GPUs.
+- **GPU usage in the status bar**: shows the busiest GPU usage in a single compact item and includes VRAM usage when available. GPU telemetry uses lightweight platform-specific backends, and the tooltip expands all detected GPUs.
 - **Memory usage in the status bar**: shows used memory and total memory, for example `8.4GB / 16.0GB`.
 - **Workspace disk usage**: shows usage for the disk that contains your first workspace folder. If no workspace is open, it uses your home directory.
 - **Top CPU processes**: click the CPU item or run the command to see the top 5 CPU-consuming processes.
@@ -119,7 +119,7 @@ Example `settings.json`:
 - Disabled monitors are not sampled in the refresh loop.
 - Process lists are collected only when you open them.
 - On Windows, process data is collected through PowerShell/CIM. On macOS and Linux, it is collected through `ps`.
-- GPU monitoring supports multiple GPUs in a single item. The tooltip expands every detected device and degrades gracefully when VRAM totals are unavailable.
+- GPU monitoring supports multiple GPUs in a single item. The tooltip expands every detected device and degrades gracefully when VRAM totals are unavailable or fresh GPU telemetry cannot be read.
 
 ## License
 
