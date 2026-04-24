@@ -2,6 +2,12 @@
 
 All notable changes to the "Moba Status Bar" extension will be documented in this file.
 
+## [1.2.6] - 2026-04-24
+
+### Fixed
+
+- Fixed GPU status visibility in left-aligned mode by giving each status bar item a stable id and ensuring the GPU item keeps enough priority to remain visible.
+
 ## [1.2.5] - 2026-04-24
 
 ### Added

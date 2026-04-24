@@ -9,6 +9,10 @@ import {
   MEMORY_STATUS_PRIORITY_LEFT,
   GPU_STATUS_PRIORITY_LEFT,
   DISK_STATUS_PRIORITY_LEFT,
+  CPU_STATUS_ITEM_ID,
+  MEMORY_STATUS_ITEM_ID,
+  GPU_STATUS_ITEM_ID,
+  DISK_STATUS_ITEM_ID,
   SHOW_CPU_PROCESSES_COMMAND,
   SHOW_MEMORY_PROCESSES_COMMAND,
 } from './constants.js';
@@ -100,14 +104,21 @@ export function createStatusBarManager(): StatusBarManager {
 
       disposeItems();
       currentAlignment = nextAlignment;
-      cpuStatusBarItem = vscode.window.createStatusBarItem(nextAlignment,
+      cpuStatusBarItem = vscode.window.createStatusBarItem(CPU_STATUS_ITEM_ID, nextAlignment,
         nextAlignment == vscode.StatusBarAlignment.Right ? CPU_STATUS_PRIORITY : CPU_STATUS_PRIORITY_LEFT);
-      memoryStatusBarItem = vscode.window.createStatusBarItem(nextAlignment,
+      cpuStatusBarItem.name = 'Moba CPU';
+
+      memoryStatusBarItem = vscode.window.createStatusBarItem(MEMORY_STATUS_ITEM_ID, nextAlignment,
         nextAlignment == vscode.StatusBarAlignment.Right ? MEMORY_STATUS_PRIORITY : MEMORY_STATUS_PRIORITY_LEFT);
-      gpuStatusBarItem = vscode.window.createStatusBarItem(nextAlignment,
+      memoryStatusBarItem.name = 'Moba Memory';
+
+      gpuStatusBarItem = vscode.window.createStatusBarItem(GPU_STATUS_ITEM_ID, nextAlignment,
         nextAlignment == vscode.StatusBarAlignment.Right ? GPU_STATUS_PRIORITY : GPU_STATUS_PRIORITY_LEFT);
-      diskStatusBarItem = vscode.window.createStatusBarItem(nextAlignment,
+      gpuStatusBarItem.name = 'Moba GPU';
+
+      diskStatusBarItem = vscode.window.createStatusBarItem(DISK_STATUS_ITEM_ID, nextAlignment,
         nextAlignment == vscode.StatusBarAlignment.Right ? DISK_STATUS_PRIORITY : DISK_STATUS_PRIORITY_LEFT);
+      diskStatusBarItem.name = 'Moba Disk';
       statusBarsVisible = false;
     },
 
