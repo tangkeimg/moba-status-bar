@@ -158,8 +158,8 @@ async function readUnixTopCpuProcesses(): Promise<CpuProcess[]> {
   try {
     const args =
       process.platform === 'linux'
-        ? ['-ww', '-eo', 'args,pcpu', '--sort=-pcpu']
-        : ['-ww', '-Ao', 'args,pcpu'];
+        ? ['-ww', '-eo', 'pid,args,pcpu', '--sort=-pcpu']
+        : ['-ww', '-Ao', 'pid,args,pcpu'];
     const { stdout } = await execFileAsync('ps', args, {
       timeout: 1200,
       windowsHide: true,
@@ -175,8 +175,8 @@ async function readUnixTopMemoryProcesses(): Promise<MemoryProcess[]> {
   try {
     const args =
       process.platform === 'linux'
-        ? ['-ww', '-eo', 'args,pmem', '--sort=-pmem']
-        : ['-ww', '-Ao', 'args,pmem'];
+        ? ['-ww', '-eo', 'pid,args,pmem', '--sort=-pmem']
+        : ['-ww', '-Ao', 'pid,args,pmem'];
     const { stdout } = await execFileAsync('ps', args, {
       timeout: 1200,
       windowsHide: true,
@@ -219,32 +219,36 @@ function parsePsMemoryRows(stdout: string): MemoryProcess[] {
 }
 
 function parseUnixProcessRow(row: string): CpuProcess | undefined {
-  const match = row.trim().match(/^(.*\S)\s+([0-9]+(?:\.[0-9]+)?)$/);
+  const match = row.trim().match(/^([0-9]+)\s+(.*\S)\s+([0-9]+(?:\.[0-9]+)?)$/);
 
   if (!match) {
     return undefined;
   }
 
   return {
-    name: match[1],
-    cpuPercent: Number(match[2]),
+    name: formatUnixProcessName(match[2], match[1]),
+    cpuPercent: Number(match[3]),
   };
 }
 
 function parseUnixMemoryProcessRow(row: string): MemoryProcess | undefined {
-  const match = row.trim().match(/^(.*\S)\s+([0-9]+(?:\.[0-9]+)?)$/);
+  const match = row.trim().match(/^([0-9]+)\s+(.*\S)\s+([0-9]+(?:\.[0-9]+)?)$/);
 
   if (!match) {
     return undefined;
   }
 
-  const memoryPercent = Number(match[2]);
+  const memoryPercent = Number(match[3]);
 
   return {
-    name: match[1],
+    name: formatUnixProcessName(match[2], match[1]),
     memoryPercent,
     memoryBytes: (memoryPercent / 100) * os.totalmem(),
   };
+}
+
+function formatUnixProcessName(name: string, pid: string): string {
+  return pid ? `${name} (${pid})` : name;
 }
 
 function formatWindowsProcessName(row: {
