@@ -7,8 +7,6 @@ import { calculateMemoryPercent, clampPercent } from './utils.js';
 const execFileAsync = promisify(execFile);
 const GPU_COMMAND_TIMEOUT_MS = 5000;
 const GPU_MEMORY_REFRESH_MS = 5000;
-const WINDOWS_GPU_UTIL_REFRESH_MS = 2000;
-const WINDOWS_GPU_MEMORY_REFRESH_MS = 10000;
 
 type GpuBackend = 'windows-counters' | 'linux-nvidia-smi' | 'linux-rocm-smi' | 'none';
 
@@ -25,6 +23,7 @@ type GpuCounterSnapshot = {
 type WindowsGpuMetadata = {
   name?: string;
   memoryTotalBytes?: number;
+  isPhysical: boolean;
 };
 
 export interface GpuSampler {
@@ -37,9 +36,7 @@ export function createGpuSampler(): GpuSampler {
   let cachedMemoryByDeviceId = new Map<string, Pick<GpuDeviceSample, 'memoryUsedBytes' | 'memoryTotalBytes' | 'memoryPercent'>>();
   let nextMemoryRefreshAt = 0;
   let cachedSample: GpuAggregateSample | undefined;
-  let nextWindowsUtilRefreshAt = 0;
-  let nextWindowsMemoryRefreshAt = 0;
-  let windowsMetadataPromise: Promise<Map<string, WindowsGpuMetadata>> | undefined;
+  let windowsMetadataPromise: Promise<WindowsGpuMetadata[]> | undefined;
 
   return {
     async readSample() {
@@ -53,14 +50,7 @@ export function createGpuSampler(): GpuSampler {
         switch (backend) {
           case 'windows-counters':
             windowsMetadataPromise ??= readWindowsGpuMetadata();
-            cachedSample = await readWindowsGpuSample(
-              cachedSample,
-              nextWindowsUtilRefreshAt,
-              nextWindowsMemoryRefreshAt,
-              windowsMetadataPromise,
-            ) ?? cachedSample;
-            nextWindowsUtilRefreshAt = Date.now() + WINDOWS_GPU_UTIL_REFRESH_MS;
-            nextWindowsMemoryRefreshAt = Date.now() + WINDOWS_GPU_MEMORY_REFRESH_MS;
+            cachedSample = await readWindowsGpuSample(cachedSample, windowsMetadataPromise) ?? cachedSample;
             return cachedSample;
           case 'linux-nvidia-smi':
             cachedSample = await readNvidiaSmiGpuSample() ?? cachedSample;
@@ -88,8 +78,6 @@ export function createGpuSampler(): GpuSampler {
       cachedMemoryByDeviceId = new Map();
       cachedSample = undefined;
       nextMemoryRefreshAt = 0;
-      nextWindowsUtilRefreshAt = 0;
-      nextWindowsMemoryRefreshAt = 0;
       windowsMetadataPromise = undefined;
     },
   };
@@ -125,17 +113,15 @@ async function commandExists(command: string): Promise<boolean> {
 
 async function readWindowsGpuSample(
   previousSample: GpuAggregateSample | undefined,
-  nextUtilRefreshAt: number,
-  nextMemoryRefreshAt: number,
-  windowsMetadataPromise: Promise<Map<string, WindowsGpuMetadata>>,
+  windowsMetadataPromise: Promise<WindowsGpuMetadata[]>,
 ): Promise<GpuAggregateSample | undefined> {
-  const now = Date.now();
-  const [utilizationRows, memoryRows, metadataByDeviceId] = await Promise.all([
-    now >= nextUtilRefreshAt ? readWindowsCounterRows('Utilization') : Promise.resolve<GpuCounterSampleRow[]>([]),
-    now >= nextMemoryRefreshAt ? readWindowsCounterRows('Memory') : Promise.resolve<GpuCounterSampleRow[]>([]),
+  const [counterSnapshot, metadataEntries] = await Promise.all([
+    readWindowsCounterSnapshot(),
     windowsMetadataPromise,
   ]);
-  const deviceMap = new Map<string, GpuDeviceSample>(
+  const utilizationRows = counterSnapshot.utilizationRows;
+  const memoryRows = counterSnapshot.memoryRows;
+  const deviceMap = new Map<string, GpuDeviceSample & { isPhysical?: boolean }>(
     previousSample?.devices.map((device) => [device.id, { ...device }]) ?? [],
   );
 
@@ -143,33 +129,33 @@ async function readWindowsGpuSample(
     return previousSample;
   }
 
+  if (utilizationRows.length > 0) {
+    for (const device of deviceMap.values()) {
+      device.utilizationPercent = undefined;
+    }
+  }
+
+  if (memoryRows.length > 0) {
+    for (const device of deviceMap.values()) {
+      device.memoryUsedBytes = undefined;
+      device.memoryPercent = undefined;
+    }
+  }
+
   mergeWindowsCounterRows(deviceMap, utilizationRows, 'utilization');
   mergeWindowsCounterRows(deviceMap, memoryRows, 'memory');
 
-  const sortedDeviceIds = [...deviceMap.keys()].sort();
-
-  for (const [index, deviceId] of sortedDeviceIds.entries()) {
-    const current = deviceMap.get(deviceId);
-
-    if (!current) {
-      continue;
-    }
-
-    const metadata = metadataByDeviceId.get(deviceId);
-    current.index = index;
-    current.name = metadata?.name ?? `GPU ${index}`;
-
-    if (metadata?.memoryTotalBytes !== undefined) {
-      current.memoryTotalBytes = metadata.memoryTotalBytes;
-    }
-
-    current.memoryPercent =
-      current.memoryUsedBytes !== undefined && current.memoryTotalBytes !== undefined
-        ? calculateMemoryPercent(current.memoryUsedBytes, current.memoryTotalBytes)
-        : undefined;
-  }
-
-  return createAggregateGpuSample([...deviceMap.values()]);
+  return createAggregateGpuSample(
+    applyWindowsMetadataAndFilter([...deviceMap.values()], metadataEntries)
+      .map((device, index) => ({
+        ...device,
+        index,
+        memoryPercent:
+          device.memoryUsedBytes !== undefined && device.memoryTotalBytes !== undefined
+            ? calculateMemoryPercent(device.memoryUsedBytes, device.memoryTotalBytes)
+            : undefined,
+      })),
+  );
 }
 
 async function readNvidiaSmiGpuSample(): Promise<GpuAggregateSample | undefined> {
@@ -291,19 +277,24 @@ function extractWindowsGpuDeviceId(instanceName: string): string | undefined {
   return match?.[0];
 }
 
-async function readWindowsCounterRows(kind: keyof GpuCounterSnapshot): Promise<GpuCounterSampleRow[]> {
-  const counterPath =
-    kind === 'Utilization'
-      ? '\\GPU Engine(*)\\Utilization Percentage'
-      : '\\GPU Adapter Memory(*)\\Dedicated Usage';
+async function readWindowsCounterSnapshot(): Promise<{
+  utilizationRows: GpuCounterSampleRow[];
+  memoryRows: GpuCounterSampleRow[];
+}> {
   const script = [
-    `$samples = (Get-Counter '${counterPath}').CounterSamples | ForEach-Object {`,
+    "$util = (Get-Counter '\\GPU Engine(*)\\Utilization Percentage').CounterSamples | ForEach-Object {",
     '  [PSCustomObject]@{',
     '    InstanceName = $_.InstanceName',
     '    CookedValue = [double]$_.CookedValue',
     '  }',
     '}',
-    '$samples | ConvertTo-Json -Compress -Depth 3',
+    "$memory = (Get-Counter '\\GPU Adapter Memory(*)\\Dedicated Usage').CounterSamples | ForEach-Object {",
+    '  [PSCustomObject]@{',
+    '    InstanceName = $_.InstanceName',
+    '    CookedValue = [double]$_.CookedValue',
+    '  }',
+    '}',
+    '[PSCustomObject]@{ Utilization = $util; Memory = $memory } | ConvertTo-Json -Compress -Depth 4',
   ].join('\n');
   const { stdout } = await execFileAsync(
     'powershell.exe',
@@ -313,10 +304,18 @@ async function readWindowsCounterRows(kind: keyof GpuCounterSnapshot): Promise<G
   const raw = stdout.trim();
 
   if (!raw) {
-    return [];
+    return {
+      utilizationRows: [],
+      memoryRows: [],
+    };
   }
 
-  return toArray(JSON.parse(raw) as GpuCounterSampleRow[] | GpuCounterSampleRow);
+  const parsed = JSON.parse(raw) as GpuCounterSnapshot;
+
+  return {
+    utilizationRows: toArray(parsed.Utilization),
+    memoryRows: toArray(parsed.Memory),
+  };
 }
 
 function mergeWindowsCounterRows(
@@ -361,7 +360,7 @@ function mergeWindowsCounterRows(
   }
 }
 
-async function readWindowsGpuMetadata(): Promise<Map<string, WindowsGpuMetadata>> {
+async function readWindowsGpuMetadata(): Promise<WindowsGpuMetadata[]> {
   const script = [
     "$items = Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Video\\*\\0000' -ErrorAction SilentlyContinue | ForEach-Object {",
     '  $memory = $null',
@@ -377,6 +376,7 @@ async function readWindowsGpuMetadata(): Promise<Map<string, WindowsGpuMetadata>
     '  [PSCustomObject]@{',
     '    Name = [string]$_.DriverDesc',
     '    MemoryTotalBytes = $memory',
+    '    MatchingDeviceId = [string]$_.MatchingDeviceId',
     '  }',
     "} | Where-Object { $_.Name }",
     '$items | ConvertTo-Json -Compress -Depth 3',
@@ -389,32 +389,17 @@ async function readWindowsGpuMetadata(): Promise<Map<string, WindowsGpuMetadata>
   const raw = stdout.trim();
 
   if (!raw) {
-    return new Map();
+    return [];
   }
 
-  const metadataRows = toArray(JSON.parse(raw) as Array<{ Name?: string; MemoryTotalBytes?: number }> | { Name?: string; MemoryTotalBytes?: number });
-  const metadataEntries = metadataRows
+  const metadataRows = toArray(JSON.parse(raw) as Array<{ Name?: string; MemoryTotalBytes?: number; MatchingDeviceId?: string }> | { Name?: string; MemoryTotalBytes?: number; MatchingDeviceId?: string });
+  return metadataRows
     .map((row) => ({
       name: typeof row.Name === 'string' ? row.Name.trim() : '',
       memoryTotalBytes: typeof row.MemoryTotalBytes === 'number' && Number.isFinite(row.MemoryTotalBytes) ? row.MemoryTotalBytes : undefined,
+      isPhysical: isPhysicalWindowsAdapter(row.MatchingDeviceId),
     }))
     .filter((row) => row.name);
-  const utilizationRows = await readWindowsCounterRows('Utilization');
-  const sortedDeviceIds = [...new Set(utilizationRows
-    .map((row) => typeof row.InstanceName === 'string' ? extractWindowsGpuDeviceId(row.InstanceName) : undefined)
-    .filter((deviceId): deviceId is string => Boolean(deviceId)))]
-    .sort();
-  const metadataByDeviceId = new Map<string, WindowsGpuMetadata>();
-
-  for (const [index, deviceId] of sortedDeviceIds.entries()) {
-    const metadata = metadataEntries[index];
-
-    if (metadata) {
-      metadataByDeviceId.set(deviceId, metadata);
-    }
-  }
-
-  return metadataByDeviceId;
 }
 
 function toArray<T>(value: T[] | T | undefined): T[] {
@@ -423,6 +408,90 @@ function toArray<T>(value: T[] | T | undefined): T[] {
   }
 
   return Array.isArray(value) ? value : [value];
+}
+
+function applyWindowsMetadataAndFilter(
+  devices: Array<GpuDeviceSample & { isPhysical?: boolean }>,
+  metadataEntries: WindowsGpuMetadata[],
+): GpuDeviceSample[] {
+  if (devices.length === 0) {
+    return [];
+  }
+
+  const rankedDevices = [...devices].sort(compareWindowsDevicePriority);
+  const physicalMetadata = metadataEntries.filter((metadata) => metadata.isPhysical);
+  const nonPhysicalMetadata = metadataEntries.filter((metadata) => !metadata.isPhysical);
+
+  for (const [index, metadata] of physicalMetadata.entries()) {
+    const device = rankedDevices[index];
+
+    if (!device) {
+      break;
+    }
+
+    device.isPhysical = true;
+    device.name = metadata.name ?? device.name;
+
+    if (metadata.memoryTotalBytes !== undefined) {
+      device.memoryTotalBytes = metadata.memoryTotalBytes;
+    }
+  }
+
+  const remainingDevices = rankedDevices.filter((device) => device.isPhysical === undefined).reverse();
+
+  for (const [index, metadata] of nonPhysicalMetadata.entries()) {
+    const device = remainingDevices[index];
+
+    if (!device) {
+      break;
+    }
+
+    device.isPhysical = false;
+    device.name = metadata.name ?? device.name;
+  }
+
+  return devices
+    .filter((device) => device.isPhysical !== false)
+    .sort((left, right) => left.index - right.index)
+    .map(({ isPhysical, ...device }) => device);
+}
+
+function compareWindowsDevicePriority(
+  left: GpuDeviceSample & { isPhysical?: boolean },
+  right: GpuDeviceSample & { isPhysical?: boolean },
+): number {
+  const leftHasMemory = (left.memoryUsedBytes ?? 0) > 0 ? 1 : 0;
+  const rightHasMemory = (right.memoryUsedBytes ?? 0) > 0 ? 1 : 0;
+
+  if (rightHasMemory !== leftHasMemory) {
+    return rightHasMemory - leftHasMemory;
+  }
+
+  const rightUtilization = right.utilizationPercent ?? 0;
+  const leftUtilization = left.utilizationPercent ?? 0;
+
+  if (rightUtilization !== leftUtilization) {
+    return rightUtilization - leftUtilization;
+  }
+
+  const rightMemory = right.memoryUsedBytes ?? 0;
+  const leftMemory = left.memoryUsedBytes ?? 0;
+
+  if (rightMemory !== leftMemory) {
+    return rightMemory - leftMemory;
+  }
+
+  return left.id.localeCompare(right.id);
+}
+
+function isPhysicalWindowsAdapter(matchingDeviceId: string | undefined): boolean {
+  const normalizedDeviceId = matchingDeviceId?.trim().toUpperCase() ?? '';
+
+  if (!normalizedDeviceId) {
+    return true;
+  }
+
+  return !normalizedDeviceId.startsWith('ROOT\\');
 }
 
 function createAggregateGpuSample(devices: GpuDeviceSample[]): GpuAggregateSample | undefined {

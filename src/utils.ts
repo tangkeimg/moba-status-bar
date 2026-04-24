@@ -48,6 +48,10 @@ export function formatPercent(value: number): string {
   return `${Math.round(clampPercent(value)).toString().padStart(2, FIGURE_SPACE)}%`;
 }
 
+export function formatPrecisePercent(value: number): string {
+  return `${clampPercent(value).toFixed(1)}%`;
+}
+
 export function formatCpuTrendGraph(samples: number[], length: number): string {
   const normalizedLength = Math.max(0, Math.round(length));
   const visibleSamples = samples.slice(-length);

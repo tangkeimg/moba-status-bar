@@ -14,7 +14,7 @@ import {
 } from './constants.js';
 import { readAlignment, readCpuTrendGraphConfig, readWarningThresholds } from './config.js';
 import type { ResourceSample, DiskSample, EnabledMonitors, GpuAggregateSample, GpuDeviceSample } from './types.js';
-import { formatPercent, formatStorageUsage, formatCompactStorageUsage, formatDiskUsage, calculateMemoryPercent, formatCpuTrendGraph, formatBytes } from './utils.js';
+import { formatPercent, formatPrecisePercent, formatStorageUsage, formatCompactStorageUsage, formatDiskUsage, calculateMemoryPercent, formatCpuTrendGraph, formatBytes } from './utils.js';
 
 export interface StatusBarManager {
   readonly cpuStatusBarItem: vscode.StatusBarItem;
@@ -148,7 +148,7 @@ export function createStatusBarManager(): StatusBarManager {
         latestGpu = sample.gpu;
 
         if (sample.gpu) {
-          const gpuStatusText = `$(device-desktop) ${formatPercent(sample.gpu.aggregateUtilizationPercent)}${formatAggregateGpuPanelMemory(sample.gpu)}`;
+          const gpuStatusText = `$(device-desktop) ${formatPrecisePercent(sample.gpu.aggregateUtilizationPercent)}${formatAggregateGpuPanelMemory(sample.gpu)}`;
 
           if (gpuStatusText !== previousGpuStatusText) {
             gpuStatusBarItem.text = gpuStatusText;
@@ -249,7 +249,7 @@ export function createStatusBarManager(): StatusBarManager {
         return;
       }
 
-      lines.push(`Aggregate usage: ${formatPercent(activeGpu.aggregateUtilizationPercent)}${formatAggregateGpuTooltipMemory(activeGpu)}`);
+      lines.push(`Aggregate usage: ${formatPrecisePercent(activeGpu.aggregateUtilizationPercent)}${formatAggregateGpuTooltipMemory(activeGpu)}`);
 
       for (const device of activeGpu.devices) {
         lines.push(formatGpuTooltipLine(device));
@@ -377,7 +377,7 @@ export function createStatusBarManager(): StatusBarManager {
 }
 
 function formatGpuTooltipLine(device: GpuDeviceSample): string {
-  const utilization = device.utilizationPercent !== undefined ? formatPercent(device.utilizationPercent) : '--';
+  const utilization = device.utilizationPercent !== undefined ? formatPrecisePercent(device.utilizationPercent) : '--';
   const memory = formatGpuMemory(device);
   return `${formatGpuLabel(device)} · ${utilization} · ${memory}`;
 }
@@ -401,10 +401,6 @@ function formatGpuMemory(device: GpuDeviceSample): string {
 function formatAggregateGpuPanelMemory(gpu: GpuAggregateSample | undefined): string {
   if (!gpu) {
     return '';
-  }
-
-  if (gpu.aggregateMemoryPercent !== undefined) {
-    return ` ${formatPercent(gpu.aggregateMemoryPercent)} VRAM`;
   }
 
   if (gpu.aggregateMemoryUsedBytes !== undefined && gpu.aggregateMemoryTotalBytes !== undefined) {
