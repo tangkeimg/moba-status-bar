@@ -40,7 +40,14 @@ export function createGpuSampler(): GpuSampler {
 
   return {
     async readSample() {
-      const backend = await (backendPromise ??= detectGpuBackend());
+      let backend: GpuBackend;
+
+      try {
+        backend = await (backendPromise ??= detectGpuBackend());
+      } catch {
+        backendPromise = Promise.resolve('none');
+        return undefined;
+      }
 
       if (backend === 'none') {
         return undefined;
@@ -49,7 +56,7 @@ export function createGpuSampler(): GpuSampler {
       try {
         switch (backend) {
           case 'windows-counters':
-            windowsMetadataPromise ??= readWindowsGpuMetadata();
+            windowsMetadataPromise ??= readWindowsGpuMetadata().catch(() => []);
             cachedSample = await readWindowsGpuSample(cachedSample, windowsMetadataPromise) ?? cachedSample;
             return cachedSample;
           case 'linux-nvidia-smi':

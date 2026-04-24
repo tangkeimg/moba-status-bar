@@ -1,7 +1,7 @@
 {
   "name": "moba-status-bar",
   "displayName": "Moba Status Bar",
-  "description": "CPU, memory, and disk usage monitor with a compact trend graph in the VS Code status bar.",
+  "description": "CPU, GPU, memory, and disk usage monitor with a compact trend graph in the VS Code status bar.",
   "keywords": [
     "cpu monitor",
     "gpu monitor",
@@ -15,7 +15,7 @@
     "cpu usage",
     "memory usage"
   ],
-  "version": "0.1.2",
+  "version": "1.2.5",
   "publisher": "tangkeimg",
   "license": "MIT",
   "icon": "output.png",

@@ -2,6 +2,20 @@
 
 All notable changes to the "Moba Status Bar" extension will be documented in this file.
 
+## [1.2.5] - 2026-04-24
+
+### Added
+
+- Added Windows GPU detection using GPU Engine and GPU Adapter Memory performance counters, including multi-GPU status and VRAM data when available.
+
+### Changed
+
+- Documented GPU platform support and fallback behavior for Windows, Linux, macOS, and unsupported systems.
+
+### Fixed
+
+- Hardened GPU fallback handling so backend detection failures, Linux GPU command failures, macOS unsupported telemetry, or Windows GPU metadata errors fall back cleanly instead of surfacing refresh errors.
+
 ## [0.1.2] - 2026-04-25
 
 ### Changed

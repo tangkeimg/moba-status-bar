@@ -17,7 +17,7 @@ Keep system resource usage visible at all times without leaving your editor. Mob
 ## Why Moba Status Bar?
 
 - **Live CPU usage with trend graph** directly in the status bar
-- **GPU usage with multi-GPU tooltip**
+- **Windows GPU usage detection with multi-GPU tooltip**
 - **Memory usage at a glance**
 - **Disk usage for current workspace**
 - **One-click process inspection** (CPU & memory)
@@ -33,13 +33,13 @@ No setup required. Customize behavior later in Settings if needed.
 ## Features
 
 - **CPU usage with trend graph**: shows real-time CPU usage with a compact trend graph in the status bar.
-- **GPU usage in the status bar**: shows the busiest GPU usage in a single compact item and includes VRAM usage when available, while the tooltip expands all detected GPUs.
+- **GPU usage in the status bar**: shows the busiest GPU usage in a single compact item and includes VRAM usage when available. Windows GPU detection is supported through native performance counters, while the tooltip expands all detected GPUs.
 - **Memory usage in the status bar**: shows used memory and total memory, for example `8.4GB / 16.0GB`.
 - **Workspace disk usage**: shows usage for the disk that contains your first workspace folder. If no workspace is open, it uses your home directory.
 - **Top CPU processes**: click the CPU item or run the command to see the top 5 CPU-consuming processes.
 - **Top memory processes**: click the memory item or run the command to see the top 5 memory-consuming processes.
-- **Warning highlights**: CPU, memory, and disk items can highlight automatically when usage reaches your configured threshold.
-- **Configurable refresh rate**: choose how often CPU and memory usage updates.
+- **Warning highlights**: CPU, GPU, memory, and disk items can highlight automatically when usage reaches your configured threshold.
+- **Configurable refresh rate**: choose how often enabled monitors update.
 
 ## Status Bar Items
 
@@ -51,6 +51,17 @@ After installation, the extension starts automatically when VS Code finishes lau
 | `$(server)` Memory | Used memory / total memory | Click to show top memory processes |
 | `$(device-desktop)` GPU | Busiest GPU utilization and VRAM usage when available; hover to inspect all GPUs | Hover to show per-GPU usage and VRAM data |
 | `$(archive)` Disk | Workspace disk label and usage percentage | Hover to view target path and usage |
+
+## GPU Platform Support
+
+GPU monitoring is best-effort and never blocks the rest of the status bar. If GPU telemetry is unsupported, unavailable, times out, or returns invalid data, the GPU item is hidden and CPU, memory, and disk monitoring continue normally.
+
+| Platform | Backend | Behavior |
+| --- | --- | --- |
+| Windows | PowerShell `Get-Counter` GPU Engine and GPU Adapter Memory counters, with registry metadata for names and VRAM totals | Shows per-GPU utilization and dedicated VRAM when counters are available. |
+| Linux | `nvidia-smi` for NVIDIA GPUs, or `rocm-smi` for AMD ROCm GPUs when installed | Shows utilization and VRAM from the available vendor tool. Missing tools, driver errors, command timeouts, or parse failures fall back to no GPU item. |
+| macOS | No lightweight built-in GPU telemetry backend | GPU monitoring falls back to hidden; the extension does not error or stop refreshing other monitors. |
+| Other platforms | None | GPU monitoring falls back to hidden. |
 
 ## Commands
 
