@@ -3,6 +3,8 @@ import {
   CONFIG_SECTION,
   DEFAULT_CPU_MONITOR_ENABLED,
   DEFAULT_CPU_WARNING_THRESHOLD_PERCENT,
+  DEFAULT_GPU_MONITOR_ENABLED,
+  DEFAULT_GPU_WARNING_THRESHOLD_PERCENT,
   DEFAULT_DISK_MONITOR_ENABLED,
   DEFAULT_MEMORY_WARNING_THRESHOLD_PERCENT,
   DEFAULT_DISK_WARNING_THRESHOLD_PERCENT,
@@ -22,11 +24,13 @@ export function readWarningThresholds(): WarningThresholds {
   const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
   const cpuPercent = config.get<number>('cpuWarningThresholdPercent', DEFAULT_CPU_WARNING_THRESHOLD_PERCENT);
   const memoryPercent = config.get<number>('memoryWarningThresholdPercent', DEFAULT_MEMORY_WARNING_THRESHOLD_PERCENT);
+  const gpuPercent = config.get<number>('gpuWarningThresholdPercent', DEFAULT_GPU_WARNING_THRESHOLD_PERCENT);
   const diskPercent = config.get<number>('diskWarningThresholdPercent', DEFAULT_DISK_WARNING_THRESHOLD_PERCENT);
 
   return {
     cpuPercent: clampPercent(cpuPercent),
     memoryPercent: clampPercent(memoryPercent),
+    gpuPercent: clampPercent(gpuPercent),
     diskPercent: clampPercent(diskPercent),
   };
 }
@@ -60,6 +64,7 @@ export function readEnabledMonitors(): EnabledMonitors {
   return {
     cpu: config.get<boolean>('cpuEnabled', DEFAULT_CPU_MONITOR_ENABLED),
     memory: config.get<boolean>('memoryEnabled', DEFAULT_MEMORY_MONITOR_ENABLED),
+    gpu: config.get<boolean>('gpuEnabled', DEFAULT_GPU_MONITOR_ENABLED),
     disk: config.get<boolean>('diskEnabled', DEFAULT_DISK_MONITOR_ENABLED),
   };
 }

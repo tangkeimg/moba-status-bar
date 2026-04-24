@@ -78,6 +78,10 @@ export function formatStorageUsage(usedBytes: number, totalBytes: number): strin
   return `${formatGigabytes(usedBytes)}GB / ${formatGigabytes(totalBytes)}GB`;
 }
 
+export function formatCompactStorageUsage(usedBytes: number, totalBytes: number): string {
+  return `${formatGigabytes(usedBytes)}/${formatGigabytes(totalBytes)}G`;
+}
+
 export function formatDiskUsage(disk: DiskSample): string {
   return `${formatDiskLabel(disk.diskPath)} ${formatPercent(disk.diskPercent)}`;
 }

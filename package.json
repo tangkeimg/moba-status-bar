@@ -4,6 +4,7 @@
   "description": "CPU, memory, and disk usage monitor with a compact trend graph in the VS Code status bar.",
   "keywords": [
     "cpu monitor",
+    "gpu monitor",
     "memory monitor",
     "disk usage",
     "status bar",
@@ -89,10 +90,24 @@
           "order": 5,
           "description": "Show a warning background when memory usage is at or above this percentage."
         },
-        "mobaStatusBar.diskEnabled": {
+        "mobaStatusBar.gpuEnabled": {
           "type": "boolean",
           "default": true,
           "order": 6,
+          "description": "Enable GPU monitoring. When disabled, GPU sampling is not collected."
+        },
+        "mobaStatusBar.gpuWarningThresholdPercent": {
+          "type": "number",
+          "default": 90,
+          "minimum": 0,
+          "maximum": 100,
+          "order": 7,
+          "description": "Show a warning background when GPU usage is at or above this percentage."
+        },
+        "mobaStatusBar.diskEnabled": {
+          "type": "boolean",
+          "default": true,
+          "order": 8,
           "description": "Enable disk monitoring. When disabled, disk usage is not sampled."
         },
         "mobaStatusBar.diskWarningThresholdPercent": {
@@ -100,14 +115,14 @@
           "default": 85,
           "minimum": 0,
           "maximum": 100,
-          "order": 7,
+          "order": 9,
           "description": "Show a warning background when disk usage is at or above this percentage."
         },
         "mobaStatusBar.refreshIntervalMs": {
           "type": "number",
           "default": 1000,
           "minimum": 500,
-          "order": 8,
+          "order": 10,
           "description": "How often enabled live monitors should refresh, in milliseconds."
         },
         "mobaStatusBar.alignment": {
@@ -117,13 +132,13 @@
             "left",
             "right"
           ],
-          "order": 9,
+          "order": 11,
           "description": "Alignment of the Moba Status Bar in the status bar."
         },
         "mobaStatusBar.enabled": {
           "type": "boolean",
           "default": true,
-          "order": 10,
+          "order": 12,
           "description": "Enable the Moba Status Bar resource monitor."
         }
       }

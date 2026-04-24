@@ -4,9 +4,9 @@
 
 # Moba Status Bar
 
-CPU, memory, and disk usage monitor with a compact trend graph in the VS Code status bar.
+CPU, GPU, memory, and disk usage monitor with a compact trend graph in the VS Code status bar.
 
-Keep system resource usage visible at all times without leaving your editor. Moba Status Bar shows live CPU, memory, and disk usage directly in the status bar, with a built-in trend graph and one-click access to top resource-consuming processes.
+Keep system resource usage visible at all times without leaving your editor. Moba Status Bar shows live CPU, GPU, memory, and disk usage directly in the status bar, with a built-in trend graph and one-click access to top resource-consuming processes.
 
 [View on Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=tangkeimg.moba-status-bar)
 
@@ -17,6 +17,7 @@ Keep system resource usage visible at all times without leaving your editor. Mob
 ## Why Moba Status Bar?
 
 - **Live CPU usage with trend graph** directly in the status bar
+- **GPU usage with multi-GPU tooltip**
 - **Memory usage at a glance**
 - **Disk usage for current workspace**
 - **One-click process inspection** (CPU & memory)
@@ -25,13 +26,14 @@ Keep system resource usage visible at all times without leaving your editor. Mob
 
 ## Quick Start
 
-Install the extension and CPU, memory, and disk usage will appear automatically in the status bar.
+Install the extension and CPU, GPU, memory, and disk usage will appear automatically in the status bar when supported by your machine and platform.
 
 No setup required. Customize behavior later in Settings if needed.
 
 ## Features
 
 - **CPU usage with trend graph**: shows real-time CPU usage with a compact trend graph in the status bar.
+- **GPU usage in the status bar**: shows the busiest GPU usage in a single compact item and includes VRAM usage when available, while the tooltip expands all detected GPUs.
 - **Memory usage in the status bar**: shows used memory and total memory, for example `8.4GB / 16.0GB`.
 - **Workspace disk usage**: shows usage for the disk that contains your first workspace folder. If no workspace is open, it uses your home directory.
 - **Top CPU processes**: click the CPU item or run the command to see the top 5 CPU-consuming processes.
@@ -47,6 +49,7 @@ After installation, the extension starts automatically when VS Code finishes lau
 | --- | --- | --- |
 | `$(chip)` CPU | Current CPU usage trend and percentage | Click to show top CPU processes |
 | `$(server)` Memory | Used memory / total memory | Click to show top memory processes |
+| `$(device-desktop)` GPU | Busiest GPU utilization and VRAM usage when available; hover to inspect all GPUs | Hover to show per-GPU usage and VRAM data |
 | `$(archive)` Disk | Workspace disk label and usage percentage | Hover to view target path and usage |
 
 ## Commands
@@ -70,6 +73,8 @@ You can configure Moba Status Bar from VS Code settings.
 | `mobaStatusBar.cpuTrendGraphLength` | `6` | Number of samples shown in the CPU trend graph. |
 | `mobaStatusBar.memoryEnabled` | `true` | Enable memory monitoring. When disabled, memory usage is not sampled. |
 | `mobaStatusBar.memoryWarningThresholdPercent` | `90` | Highlight the memory item when memory usage is at or above this percentage. |
+| `mobaStatusBar.gpuEnabled` | `true` | Enable GPU monitoring. When disabled, GPU sampling is not collected. |
+| `mobaStatusBar.gpuWarningThresholdPercent` | `90` | Highlight the GPU item when GPU usage is at or above this percentage. |
 | `mobaStatusBar.diskEnabled` | `true` | Enable disk monitoring. When disabled, disk usage is not sampled. |
 | `mobaStatusBar.diskWarningThresholdPercent` | `85` | Highlight the disk item when disk usage is at or above this percentage. |
 | `mobaStatusBar.refreshIntervalMs` | `1000` | Enabled monitor refresh interval in milliseconds. Values below `500` are clamped to `500`. |
@@ -86,6 +91,8 @@ Example `settings.json`:
   "mobaStatusBar.cpuTrendGraphLength": 6,
   "mobaStatusBar.memoryEnabled": true,
   "mobaStatusBar.memoryWarningThresholdPercent": 90,
+  "mobaStatusBar.gpuEnabled": true,
+  "mobaStatusBar.gpuWarningThresholdPercent": 90,
   "mobaStatusBar.diskEnabled": true,
   "mobaStatusBar.diskWarningThresholdPercent": 80,
   "mobaStatusBar.refreshIntervalMs": 1500,
@@ -97,9 +104,11 @@ Example `settings.json`:
 ## Notes
 
 - Disk usage is cached and refreshed less often than CPU and memory to keep the extension lightweight.
+- GPU monitoring uses the lightest available backend for the current platform. On unsupported systems or when runtime GPU telemetry is unavailable, the GPU item stays hidden.
 - Disabled monitors are not sampled in the refresh loop.
 - Process lists are collected only when you open them.
 - On Windows, process data is collected through PowerShell/CIM. On macOS and Linux, it is collected through `ps`.
+- GPU monitoring supports multiple GPUs in a single item. The tooltip expands every detected device and degrades gracefully when VRAM totals are unavailable.
 
 ## License
 

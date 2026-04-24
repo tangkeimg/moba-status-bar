@@ -8,7 +8,27 @@ export type ResourceSample = {
   memoryPercent?: number;
   memoryUsedBytes?: number;
   memoryTotalBytes?: number;
+  gpu?: GpuAggregateSample;
   disk?: DiskSample;
+};
+
+export type GpuDeviceSample = {
+  id: string;
+  index: number;
+  name: string;
+  utilizationPercent?: number;
+  memoryUsedBytes?: number;
+  memoryTotalBytes?: number;
+  memoryPercent?: number;
+};
+
+export type GpuAggregateSample = {
+  devices: GpuDeviceSample[];
+  aggregateUtilizationPercent: number;
+  aggregateMemoryUsedBytes?: number;
+  aggregateMemoryTotalBytes?: number;
+  aggregateMemoryPercent?: number;
+  hasAnyMemoryData: boolean;
 };
 
 export type CpuProcess = {
@@ -32,6 +52,7 @@ export type DiskSample = {
 export type WarningThresholds = {
   cpuPercent: number;
   memoryPercent: number;
+  gpuPercent: number;
   diskPercent: number;
 };
 
@@ -43,5 +64,6 @@ export type CpuTrendGraphConfig = {
 export type EnabledMonitors = {
   cpu: boolean;
   memory: boolean;
+  gpu: boolean;
   disk: boolean;
 };
