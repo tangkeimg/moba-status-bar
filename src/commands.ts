@@ -198,7 +198,7 @@ function buildGpuConfigurationItems(displayConfig: GpuDisplayConfig): GpuConfigu
     {
       label: 'Choose GPUs...',
       description: getSelectedGpuModeDescription(displayConfig),
-      detail: 'Pick one or more detected GPUs. Selecting all GPUs replaces the old all mode. If none of those GPUs are available, the summary shows Selected GPU unavailable.',
+      detail: 'Pick zero or more detected GPUs. If no selected GPU is currently available, the summary shows Selected GPU unavailable.',
       action: 'select-devices',
       isCurrent: displayConfig.summaryMode === 'selected',
     },
@@ -248,7 +248,7 @@ async function configureSelectedGpuDevices(
     {
       canPickMany: true,
       title: 'Select GPUs for the Status Bar',
-      placeHolder: 'Choose zero or more detected GPUs. Accepting an empty selection keeps Selected GPU mode with no matched devices.',
+      placeHolder: 'Choose zero or more detected GPUs. An empty selection keeps Selected GPU mode and shows Selected GPU unavailable.',
     },
   );
 
@@ -422,6 +422,10 @@ function formatGpuCategoryLabel(category: GpuDeviceCategory | undefined): string
 function getSelectedGpuModeDescription(displayConfig: GpuDisplayConfig): string | undefined {
   if (displayConfig.summaryMode !== 'selected') {
     return undefined;
+  }
+
+  if (displayConfig.selectedDeviceMatchers.length === 0) {
+    return 'Current: no selected GPUs';
   }
 
   return `Current: ${displayConfig.selectedDeviceMatchers.length} selected GPU${displayConfig.selectedDeviceMatchers.length === 1 ? '' : 's'}`;

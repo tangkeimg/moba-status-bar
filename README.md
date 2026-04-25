@@ -71,7 +71,7 @@ Open the Command Palette with `Ctrl+Shift+P` / `Cmd+Shift+P` and run:
 | --- | --- |
 | `Moba Status Bar: Show Top CPU Processes` | Shows the top 5 CPU-consuming processes. |
 | `Moba Status Bar: Show Top Memory Processes` | Shows the top 5 memory-consuming processes. |
-| `Moba Status Bar: Configure GPU Display` | Opens a picker for detected GPUs so you can change the GPU summary mode, choose one or more GPUs including all detected GPUs, or override a GPU category without typing device names manually. |
+| `Moba Status Bar: Configure GPU Display` | Opens a picker for detected GPUs so you can change the GPU summary mode, choose zero or more GPUs, or override a GPU category without typing device names manually. |
 
 ## Settings
 
@@ -113,7 +113,7 @@ Example `settings.json`:
 }
 ```
 
-Tip: configure GPU display behavior from the GPU status bar item itself or run `Moba Status Bar: Configure GPU Display`, then choose from the detected GPU list. Selecting every detected GPU replaces the old all mode.
+Tip: configure GPU display behavior from the GPU status bar item itself or run `Moba Status Bar: Configure GPU Display`, then choose from the detected GPU list. Leaving the selection empty keeps selected mode active and shows `Selected GPU unavailable`.
 
 The GPU display mode, selected devices, and category overrides are stored internally by the extension instead of appearing as public VS Code settings.
 
