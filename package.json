@@ -43,6 +43,10 @@
       {
         "command": "mobaStatusBar.showMemoryProcesses",
         "title": "Moba Status Bar: Show Top Memory Processes"
+      },
+      {
+        "command": "mobaStatusBar.configureGpuDisplay",
+        "title": "Moba Status Bar: Configure GPU Display"
       }
     ],
     "configuration": {

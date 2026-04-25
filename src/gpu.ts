@@ -1,12 +1,15 @@
 import { execFile } from 'node:child_process';
 import * as os from 'node:os';
 import { promisify } from 'node:util';
-import type { GpuAggregateSample, GpuDeviceSample } from './types.js';
+import type { GpuAggregateSample, GpuDeviceCategory, GpuDeviceSample, GpuDisplayConfig, GpuSummaryMode, GpuSummarySample } from './types.js';
 import { calculateMemoryPercent, clampPercent } from './utils.js';
 
 const execFileAsync = promisify(execFile);
 const GPU_COMMAND_TIMEOUT_MS = 5000;
 const GPU_MEMORY_REFRESH_MS = 5000;
+const ACTIVE_GPU_UTILIZATION_THRESHOLD_PERCENT = 3;
+const ACTIVE_GPU_MEMORY_THRESHOLD_BYTES = 1024 ** 3;
+const ACTIVE_GPU_MEMORY_THRESHOLD_PERCENT = 10;
 
 type GpuBackend = 'windows-counters' | 'linux-nvidia-smi' | 'linux-rocm-smi' | 'none';
 
@@ -31,7 +34,7 @@ export interface GpuSampler {
   reset(): void;
 }
 
-export function createGpuSampler(): GpuSampler {
+export function createGpuSampler(displayConfig: GpuDisplayConfig): GpuSampler {
   let backendPromise: Promise<GpuBackend> | undefined;
   let cachedMemoryByDeviceId = new Map<string, Pick<GpuDeviceSample, 'memoryUsedBytes' | 'memoryTotalBytes' | 'memoryPercent'>>();
   let nextMemoryRefreshAt = 0;
@@ -57,13 +60,13 @@ export function createGpuSampler(): GpuSampler {
         switch (backend) {
           case 'windows-counters':
             windowsMetadataPromise ??= readWindowsGpuMetadata().catch(() => []);
-            cachedSample = await readWindowsGpuSample(cachedSample, windowsMetadataPromise) ?? cachedSample;
+            cachedSample = await readWindowsGpuSample(cachedSample, windowsMetadataPromise, displayConfig) ?? cachedSample;
             return cachedSample;
           case 'linux-nvidia-smi':
-            cachedSample = await readNvidiaSmiGpuSample() ?? cachedSample;
+            cachedSample = await readNvidiaSmiGpuSample(displayConfig) ?? cachedSample;
             return cachedSample;
           case 'linux-rocm-smi':
-            return await readRocmSmiGpuSample(cachedMemoryByDeviceId, nextMemoryRefreshAt).then((result) => {
+            return await readRocmSmiGpuSample(cachedMemoryByDeviceId, nextMemoryRefreshAt, displayConfig).then((result) => {
               if (result) {
                 cachedMemoryByDeviceId = result.memoryCache;
                 nextMemoryRefreshAt = result.nextMemoryRefreshAt;
@@ -121,6 +124,7 @@ async function commandExists(command: string): Promise<boolean> {
 async function readWindowsGpuSample(
   previousSample: GpuAggregateSample | undefined,
   windowsMetadataPromise: Promise<WindowsGpuMetadata[]>,
+  displayConfig: GpuDisplayConfig,
 ): Promise<GpuAggregateSample | undefined> {
   const [counterSnapshot, metadataEntries] = await Promise.all([
     readWindowsCounterSnapshot(),
@@ -162,10 +166,11 @@ async function readWindowsGpuSample(
             ? calculateMemoryPercent(device.memoryUsedBytes, device.memoryTotalBytes)
             : undefined,
       })),
+    displayConfig,
   );
 }
 
-async function readNvidiaSmiGpuSample(): Promise<GpuAggregateSample | undefined> {
+async function readNvidiaSmiGpuSample(displayConfig: GpuDisplayConfig): Promise<GpuAggregateSample | undefined> {
   const { stdout } = await execFileAsync(
     'nvidia-smi',
     ['--query-gpu=index,name,utilization.gpu,memory.used,memory.total', '--format=csv,noheader,nounits'],
@@ -204,12 +209,13 @@ async function readNvidiaSmiGpuSample(): Promise<GpuAggregateSample | undefined>
     });
   }
 
-  return createAggregateGpuSample(devices);
+  return createAggregateGpuSample(devices, displayConfig);
 }
 
 async function readRocmSmiGpuSample(
   cachedMemoryByDeviceId: Map<string, Pick<GpuDeviceSample, 'memoryUsedBytes' | 'memoryTotalBytes' | 'memoryPercent'>>,
   nextMemoryRefreshAt: number,
+  displayConfig: GpuDisplayConfig,
 ): Promise<{
   sample: GpuAggregateSample | undefined;
   memoryCache: Map<string, Pick<GpuDeviceSample, 'memoryUsedBytes' | 'memoryTotalBytes' | 'memoryPercent'>>;
@@ -273,7 +279,7 @@ async function readRocmSmiGpuSample(
   }
 
   return {
-    sample: createAggregateGpuSample(devices),
+    sample: createAggregateGpuSample(devices, displayConfig),
     memoryCache: nextMemoryCache,
     nextMemoryRefreshAt: Date.now() + GPU_MEMORY_REFRESH_MS,
   };
@@ -501,7 +507,7 @@ function isPhysicalWindowsAdapter(matchingDeviceId: string | undefined): boolean
   return !normalizedDeviceId.startsWith('ROOT\\');
 }
 
-function createAggregateGpuSample(devices: GpuDeviceSample[]): GpuAggregateSample | undefined {
+function createAggregateGpuSample(devices: GpuDeviceSample[], displayConfig: GpuDisplayConfig): GpuAggregateSample | undefined {
   const normalizedDevices = devices
     .map((device, index) => ({
       ...device,
@@ -511,6 +517,7 @@ function createAggregateGpuSample(devices: GpuDeviceSample[]): GpuAggregateSampl
         device.memoryUsedBytes !== undefined && device.memoryTotalBytes !== undefined
           ? calculateMemoryPercent(device.memoryUsedBytes, device.memoryTotalBytes)
           : device.memoryPercent,
+      category: device.category ?? classifyGpuDevice(device, displayConfig.categoryOverrides),
     }))
     .sort((left, right) => {
       const rightUtilization = right.utilizationPercent ?? -1;
@@ -527,33 +534,377 @@ function createAggregateGpuSample(devices: GpuDeviceSample[]): GpuAggregateSampl
     return undefined;
   }
 
-  const utilizationDevices = normalizedDevices.filter((device) => device.utilizationPercent !== undefined);
-  const aggregateUtilizationPercent =
-    utilizationDevices.length > 0
-      ? utilizationDevices.reduce((sum, device) => sum + (device.utilizationPercent ?? 0), 0) / utilizationDevices.length
-      : 0;
-  const memoryDevicesWithUsed = normalizedDevices.filter((device) => device.memoryUsedBytes !== undefined);
-  const aggregateMemoryUsedBytes = memoryDevicesWithUsed.reduce((sum, device) => sum + (device.memoryUsedBytes ?? 0), 0);
-  const devicesWithMemoryTotals = normalizedDevices.filter(
-    (device) => device.memoryTotalBytes !== undefined && device.memoryTotalBytes > 0,
-  );
-  const hasCompleteAggregateMemoryTotal =
-    memoryDevicesWithUsed.length > 0 && devicesWithMemoryTotals.length === normalizedDevices.length;
-  const aggregateMemoryTotalBytes = hasCompleteAggregateMemoryTotal
-    ? devicesWithMemoryTotals.reduce((sum, device) => sum + (device.memoryTotalBytes ?? 0), 0)
+  const allSummary = createGpuSummary(normalizedDevices, 'all', createAllGpuSummaryLabel(normalizedDevices), 'average');
+  const integratedDevices = normalizedDevices.filter((device) => device.category === 'integrated');
+  const discreteDevices = normalizedDevices.filter((device) => device.category === 'discrete');
+  const unknownDevices = normalizedDevices.filter((device) => device.category === 'unknown');
+  const integratedSummary = integratedDevices.length > 0
+    ? createGpuSummary(integratedDevices, 'integrated', createCategorySummaryLabel('integrated', integratedDevices.length), 'max')
     : undefined;
+  const discreteSummary = discreteDevices.length > 0
+    ? createGpuSummary(discreteDevices, 'discrete', createCategorySummaryLabel('discrete', discreteDevices.length), 'max')
+    : undefined;
+  const unknownSummary = unknownDevices.length > 0
+    ? createGpuSummary(unknownDevices, 'unknown', createCategorySummaryLabel('unknown', unknownDevices.length), 'max')
+    : undefined;
+  const selectedSummary = selectGpuSummary(normalizedDevices, {
+    all: allSummary,
+    integrated: integratedSummary,
+    discrete: discreteSummary,
+    unknown: unknownSummary,
+  }, displayConfig);
 
   return {
     devices: normalizedDevices,
-    aggregateUtilizationPercent,
-    aggregateMemoryUsedBytes: memoryDevicesWithUsed.length > 0 ? aggregateMemoryUsedBytes : undefined,
-    aggregateMemoryTotalBytes,
-    aggregateMemoryPercent:
-      aggregateMemoryUsedBytes > 0 && aggregateMemoryTotalBytes !== undefined && aggregateMemoryTotalBytes > 0
-        ? calculateMemoryPercent(aggregateMemoryUsedBytes, aggregateMemoryTotalBytes)
-        : undefined,
+    summary: selectedSummary,
+    groups: {
+      all: allSummary,
+      integrated: integratedSummary,
+      discrete: discreteSummary,
+      unknown: unknownSummary,
+    },
+    aggregateUtilizationPercent: allSummary.utilizationPercent,
+    aggregateMemoryUsedBytes: allSummary.memoryUsedBytes,
+    aggregateMemoryTotalBytes: allSummary.memoryTotalBytes,
+    aggregateMemoryPercent: allSummary.memoryPercent,
     hasAnyMemoryData: normalizedDevices.some((device) => device.memoryUsedBytes !== undefined || device.memoryTotalBytes !== undefined),
   };
+}
+
+function classifyGpuDevice(
+  device: Pick<GpuDeviceSample, 'id' | 'index' | 'name' | 'memoryTotalBytes'>,
+  categoryOverrides: Record<string, GpuDeviceCategory>,
+): GpuDeviceCategory {
+  const overriddenCategory = findOverriddenGpuCategory(device, categoryOverrides);
+
+  if (overriddenCategory) {
+    return overriddenCategory;
+  }
+
+  const normalizedName = device.name.trim().toLowerCase();
+
+  if (!normalizedName) {
+    return 'unknown';
+  }
+
+  if (isIntelGpu(normalizedName)) {
+    return isIntelDiscreteGpu(normalizedName) ? 'discrete' : 'integrated';
+  }
+
+  if (isNvidiaGpu(normalizedName)) {
+    return 'discrete';
+  }
+
+  if (isAmdGpu(normalizedName)) {
+    return isAmdIntegratedGpu(normalizedName, device.memoryTotalBytes) ? 'integrated' : 'discrete';
+  }
+
+  return 'unknown';
+}
+
+function findOverriddenGpuCategory(
+  device: Pick<GpuDeviceSample, 'id' | 'index' | 'name'>,
+  categoryOverrides: Record<string, GpuDeviceCategory>,
+): GpuDeviceCategory | undefined {
+  for (const [matcher, category] of Object.entries(categoryOverrides)) {
+    if (gpuDeviceMatchesMatcher(device, matcher)) {
+      return category;
+    }
+  }
+
+  return undefined;
+}
+
+function isIntelGpu(name: string): boolean {
+  return name.includes('intel');
+}
+
+function isIntelDiscreteGpu(name: string): boolean {
+  return /(arc|iris xe max|data center gpu|flex)/.test(name);
+}
+
+function isNvidiaGpu(name: string): boolean {
+  return /(nvidia|geforce|quadro|tesla|rtx|gtx)/.test(name);
+}
+
+function isAmdGpu(name: string): boolean {
+  return /(amd|radeon|ati|firepro|instinct)/.test(name);
+}
+
+function isAmdIntegratedGpu(name: string, memoryTotalBytes: number | undefined): boolean {
+  if (/(radeon\(tm\) graphics|radeon graphics|vega \d+ graphics|680m|760m|780m|880m|890m)/.test(name)) {
+    return true;
+  }
+
+  if (/(rx\s|radeon pro|firepro|instinct|mi\d|w\d{3,4}|wx)/.test(name)) {
+    return false;
+  }
+
+  return memoryTotalBytes !== undefined && memoryTotalBytes > 0 && memoryTotalBytes <= 2 * 1024 ** 3;
+}
+
+function createGpuSummary(
+  devices: GpuDeviceSample[],
+  id: string,
+  label: string,
+  utilizationMode: 'average' | 'max',
+): GpuSummarySample {
+  const utilizationDevices = devices.filter((device) => device.utilizationPercent !== undefined);
+  const utilizationPercent =
+    utilizationDevices.length > 0
+      ? utilizationMode === 'average'
+        ? utilizationDevices.reduce((sum, device) => sum + (device.utilizationPercent ?? 0), 0) / utilizationDevices.length
+        : utilizationDevices.reduce((maxValue, device) => Math.max(maxValue, device.utilizationPercent ?? 0), 0)
+      : 0;
+  const memoryDevicesWithUsed = devices.filter((device) => device.memoryUsedBytes !== undefined);
+  const memoryUsedBytes = memoryDevicesWithUsed.length > 0
+    ? memoryDevicesWithUsed.reduce((sum, device) => sum + (device.memoryUsedBytes ?? 0), 0)
+    : undefined;
+  const devicesWithMemoryTotals = devices.filter((device) => device.memoryTotalBytes !== undefined && device.memoryTotalBytes > 0);
+  const hasCompleteMemoryTotal = memoryDevicesWithUsed.length > 0 && devicesWithMemoryTotals.length === devices.length;
+  const memoryTotalBytes = hasCompleteMemoryTotal
+    ? devicesWithMemoryTotals.reduce((sum, device) => sum + (device.memoryTotalBytes ?? 0), 0)
+    : undefined;
+  const summaryCategory = devices.length === 1
+    ? devices[0].category ?? 'unknown'
+    : getSummaryCategory(devices);
+
+  return {
+    id,
+    label,
+    category: summaryCategory,
+    deviceCount: devices.length,
+    deviceIds: devices.map((device) => device.id),
+    utilizationPercent,
+    memoryUsedBytes,
+    memoryTotalBytes,
+    memoryPercent:
+      memoryUsedBytes !== undefined && memoryTotalBytes !== undefined && memoryTotalBytes > 0
+        ? calculateMemoryPercent(memoryUsedBytes, memoryTotalBytes)
+        : undefined,
+  };
+}
+
+function getSummaryCategory(devices: GpuDeviceSample[]): GpuDeviceCategory | 'mixed' {
+  if (devices.length === 0) {
+    return 'mixed';
+  }
+
+  const categories = new Set(devices.map((device) => device.category ?? 'unknown'));
+
+  return categories.size === 1 ? (devices[0].category ?? 'unknown') : 'mixed';
+}
+
+function selectGpuSummary(
+  devices: GpuDeviceSample[],
+  groups: {
+    all: GpuSummarySample;
+    integrated?: GpuSummarySample;
+    discrete?: GpuSummarySample;
+    unknown?: GpuSummarySample;
+  },
+  displayConfig: GpuDisplayConfig,
+): GpuSummarySample {
+  const automaticSummary = selectDefaultGpuSummary(devices, groups);
+
+  switch (displayConfig.summaryMode) {
+    case 'all':
+      return groups.all;
+    case 'discrete':
+      return groups.discrete ?? createUnavailableGpuSummary('discrete');
+    case 'integrated':
+      return groups.integrated ?? createUnavailableGpuSummary('integrated');
+    case 'selected': {
+      const selectedSummary = selectConfiguredGpuSummary(devices, displayConfig.selectedDeviceMatchers);
+      return selectedSummary ?? createUnavailableGpuSummary('selected');
+    }
+    case 'auto':
+    default:
+      return automaticSummary;
+  }
+}
+
+function createUnavailableGpuSummary(mode: 'discrete' | 'integrated' | 'selected'): GpuSummarySample {
+  switch (mode) {
+    case 'discrete':
+      return {
+        id: 'unavailable-discrete',
+        label: 'dGPU',
+        category: 'discrete',
+        deviceCount: 0,
+        deviceIds: [],
+        utilizationPercent: 0,
+      };
+    case 'integrated':
+      return {
+        id: 'unavailable-integrated',
+        label: 'iGPU',
+        category: 'integrated',
+        deviceCount: 0,
+        deviceIds: [],
+        utilizationPercent: 0,
+      };
+    case 'selected':
+    default:
+      return {
+        id: 'unavailable-selected',
+        label: 'Selected GPU',
+        category: 'mixed',
+        deviceCount: 0,
+        deviceIds: [],
+        utilizationPercent: 0,
+      };
+  }
+}
+
+function selectDefaultGpuSummary(
+  devices: GpuDeviceSample[],
+  groups: {
+    all: GpuSummarySample;
+    integrated?: GpuSummarySample;
+    discrete?: GpuSummarySample;
+    unknown?: GpuSummarySample;
+  },
+): GpuSummarySample {
+  const discreteDevices = devices.filter((device) => device.category === 'discrete');
+
+  if (discreteDevices.length > 0) {
+    const activeDiscreteDevices = discreteDevices.filter(isGpuDeviceActive);
+
+    if (activeDiscreteDevices.length === 1) {
+      return createSingleDeviceSummary(activeDiscreteDevices[0]);
+    }
+
+    if (activeDiscreteDevices.length > 1) {
+      return createGpuSummary(
+        activeDiscreteDevices,
+        'active-discrete',
+        createCategorySummaryLabel('discrete', activeDiscreteDevices.length),
+        'max',
+      );
+    }
+
+    return groups.discrete ?? groups.all;
+  }
+
+  const integratedDevices = devices.filter((device) => device.category === 'integrated');
+
+  if (integratedDevices.length > 0) {
+    const activeIntegratedDevices = integratedDevices.filter(isGpuDeviceActive);
+
+    if (activeIntegratedDevices.length === 1) {
+      return createSingleDeviceSummary(activeIntegratedDevices[0]);
+    }
+
+    if (activeIntegratedDevices.length > 1) {
+      return createGpuSummary(
+        activeIntegratedDevices,
+        'active-integrated',
+        createCategorySummaryLabel('integrated', activeIntegratedDevices.length),
+        'max',
+      );
+    }
+
+    return groups.integrated ?? groups.all;
+  }
+
+  return groups.unknown ?? groups.all;
+}
+
+function selectConfiguredGpuSummary(devices: GpuDeviceSample[], matchers: string[]): GpuSummarySample | undefined {
+  if (matchers.length === 0) {
+    return undefined;
+  }
+
+  const selectedDevices = devices.filter((device) => matchers.some((matcher) => gpuDeviceMatchesMatcher(device, matcher)));
+
+  if (selectedDevices.length === 0) {
+    return undefined;
+  }
+
+  if (selectedDevices.length === 1) {
+    return createSingleDeviceSummary(selectedDevices[0]);
+  }
+
+  return createGpuSummary(
+    selectedDevices,
+    'selected',
+    createSelectedGpuSummaryLabel(selectedDevices),
+    'max',
+  );
+}
+
+function createSingleDeviceSummary(device: GpuDeviceSample): GpuSummarySample {
+  return {
+    id: device.id,
+    label: createSingleDeviceSummaryLabel(device),
+    category: device.category ?? 'unknown',
+    deviceCount: 1,
+    deviceIds: [device.id],
+    utilizationPercent: device.utilizationPercent ?? 0,
+    memoryUsedBytes: device.memoryUsedBytes,
+    memoryTotalBytes: device.memoryTotalBytes,
+    memoryPercent: device.memoryPercent,
+  };
+}
+
+function createSingleDeviceSummaryLabel(device: GpuDeviceSample): string {
+  switch (device.category) {
+    case 'discrete':
+      return `dGPU ${device.index}`;
+    case 'integrated':
+      return `iGPU ${device.index}`;
+    default:
+      return `GPU ${device.index}`;
+  }
+}
+
+function createAllGpuSummaryLabel(devices: GpuDeviceSample[]): string {
+  return devices.length > 1 ? `GPU×${devices.length}` : 'GPU';
+}
+
+function createSelectedGpuSummaryLabel(devices: GpuDeviceSample[]): string {
+  const category = getSummaryCategory(devices);
+
+  if (category === 'discrete' || category === 'integrated' || category === 'unknown') {
+    return createCategorySummaryLabel(category, devices.length);
+  }
+
+  return createAllGpuSummaryLabel(devices);
+}
+
+function createCategorySummaryLabel(category: GpuDeviceCategory, count: number): string {
+  switch (category) {
+    case 'discrete':
+      return count > 1 ? `dGPU×${count}` : 'dGPU';
+    case 'integrated':
+      return count > 1 ? `iGPU×${count}` : 'iGPU';
+    default:
+      return count > 1 ? `GPU×${count}` : 'GPU';
+  }
+}
+
+function isGpuDeviceActive(device: GpuDeviceSample): boolean {
+  return (device.utilizationPercent ?? 0) >= ACTIVE_GPU_UTILIZATION_THRESHOLD_PERCENT
+    || (device.memoryPercent ?? 0) >= ACTIVE_GPU_MEMORY_THRESHOLD_PERCENT
+    || (device.memoryUsedBytes ?? 0) >= ACTIVE_GPU_MEMORY_THRESHOLD_BYTES;
+}
+
+export function gpuDeviceMatchesMatcher(device: Pick<GpuDeviceSample, 'id' | 'index' | 'name'>, matcher: string): boolean {
+  const normalizedMatcher = matcher.trim().toLowerCase();
+
+  if (!normalizedMatcher) {
+    return false;
+  }
+
+  const candidates = [
+    device.name,
+    device.id,
+    String(device.index),
+    `gpu ${device.index}`,
+  ].map((value) => value.trim().toLowerCase());
+
+  return candidates.some((candidate) => candidate.includes(normalizedMatcher));
 }
 
 function parseNumericValue(value: string, multiplier = 1): number | undefined {

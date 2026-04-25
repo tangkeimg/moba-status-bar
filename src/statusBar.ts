@@ -13,11 +13,12 @@ import {
   MEMORY_STATUS_ITEM_ID,
   GPU_STATUS_ITEM_ID,
   DISK_STATUS_ITEM_ID,
+  CONFIGURE_GPU_DISPLAY_COMMAND,
   SHOW_CPU_PROCESSES_COMMAND,
   SHOW_MEMORY_PROCESSES_COMMAND,
 } from './constants.js';
 import { readAlignment, readCpuTrendGraphConfig, readWarningThresholds } from './config.js';
-import type { ResourceSample, DiskSample, EnabledMonitors, GpuAggregateSample, GpuDeviceSample } from './types.js';
+import type { ResourceSample, DiskSample, EnabledMonitors, GpuAggregateSample, GpuDeviceCategory, GpuDeviceSample, GpuSummarySample } from './types.js';
 import {
   formatPercent,
   formatPrecisePercent,
@@ -60,6 +61,7 @@ export function createStatusBarManager(): StatusBarManager {
   let previousMemoryStatusText: string | undefined;
   let previousGpuStatusText: string | undefined;
   let previousDiskStatusText: string | undefined;
+  let previousGpuTooltipText: string | undefined;
   let latestCpuPercent = 0;
   let latestMemoryPercent = 0;
   let latestMemoryUsedBytes = 0;
@@ -126,7 +128,7 @@ export function createStatusBarManager(): StatusBarManager {
       const thresholds = readWarningThresholds();
       const cpuWarning = enabledMonitors.cpu && sample.cpuPercent !== undefined ? sample.cpuPercent >= thresholds.cpuPercent : false;
       const memoryWarning = enabledMonitors.memory && sample.memoryPercent !== undefined ? sample.memoryPercent >= thresholds.memoryPercent : false;
-      const gpuWarning = enabledMonitors.gpu && sample.gpu ? sample.gpu.aggregateUtilizationPercent >= thresholds.gpuPercent : false;
+      const gpuWarning = enabledMonitors.gpu && sample.gpu ? sample.gpu.summary.utilizationPercent >= thresholds.gpuPercent : false;
       const diskWarning = sample.disk ? sample.disk.diskPercent >= thresholds.diskPercent : false;
 
       if (enabledMonitors.cpu && sample.cpuPercent !== undefined) {
@@ -169,13 +171,14 @@ export function createStatusBarManager(): StatusBarManager {
         latestGpu = sample.gpu;
 
         if (sample.gpu) {
-          const gpuStatusText = `$(device-desktop) ${formatStatusBarPrecisePercent(sample.gpu.aggregateUtilizationPercent)}${formatAggregateGpuPanelMemory(sample.gpu)}`;
+          const gpuStatusText = `$(device-desktop) ${formatGpuSummaryStatusText(sample.gpu.summary)}`;
 
           if (gpuStatusText !== previousGpuStatusText) {
             gpuStatusBarItem.text = gpuStatusText;
             previousGpuStatusText = gpuStatusText;
           }
 
+          gpuStatusBarItem.command = CONFIGURE_GPU_DISPLAY_COMMAND;
           this.updateGpuTooltip(sample.gpu);
           gpuStatusBarItem.show();
         } else {
@@ -260,24 +263,25 @@ export function createStatusBarManager(): StatusBarManager {
     updateGpuTooltip(gpu?: GpuAggregateSample) {
       const thresholds = readWarningThresholds();
       const activeGpu = gpu ?? latestGpu;
+
       const lines = ['**GPU**', ''];
 
       if (!activeGpu) {
         lines.push('No GPU telemetry available.');
         lines.push('');
         lines.push(`Warning threshold: ${formatPercent(thresholds.gpuPercent)}`);
-        gpuStatusBarItem.tooltip = new vscode.MarkdownString(lines.join('\n\n'));
+        updateGpuTooltipText(lines.join('\n\n'));
         return;
       }
 
-      lines.push(`Aggregate usage: ${formatPrecisePercent(activeGpu.aggregateUtilizationPercent)}${formatAggregateGpuTooltipMemory(activeGpu)}`);
+      lines.push(`Current summary: ${formatGpuSummaryTooltipLine(activeGpu.summary)}`);
+      appendGpuTooltipSection(lines, 'Discrete GPUs', activeGpu.devices.filter((device) => device.category === 'discrete'));
+      appendGpuTooltipSection(lines, 'Integrated GPUs', activeGpu.devices.filter((device) => device.category === 'integrated'));
+      appendGpuTooltipSection(lines, 'Unknown GPUs', activeGpu.devices.filter((device) => device.category === 'unknown'));
 
-      for (const device of activeGpu.devices) {
-        lines.push(formatGpuTooltipLine(device));
-      }
-
+      lines.push('Click the GPU status item to choose which detected GPUs are summarized or to override a category.');
       lines.push(`Warning threshold: ${formatPercent(thresholds.gpuPercent)}`);
-      gpuStatusBarItem.tooltip = new vscode.MarkdownString(lines.join('\n\n'));
+      updateGpuTooltipText(lines.join('\n\n'));
     },
 
     updateDiskTooltip(disk?: DiskSample) {
@@ -319,6 +323,8 @@ export function createStatusBarManager(): StatusBarManager {
         gpuStatusBarItem.hide();
         gpuStatusBarItem.backgroundColor = undefined;
         previousGpuStatusText = undefined;
+        previousGpuTooltipText = undefined;
+        gpuStatusBarItem.tooltip = undefined;
         latestGpu = undefined;
         previousGpuWarning = false;
       }
@@ -342,6 +348,7 @@ export function createStatusBarManager(): StatusBarManager {
       previousMemoryStatusText = undefined;
       previousGpuStatusText = undefined;
       previousDiskStatusText = undefined;
+      previousGpuTooltipText = undefined;
       latestCpuPercent = 0;
       latestMemoryPercent = 0;
       latestMemoryUsedBytes = 0;
@@ -355,6 +362,7 @@ export function createStatusBarManager(): StatusBarManager {
       cpuStatusBarItem.backgroundColor = undefined;
       memoryStatusBarItem.backgroundColor = undefined;
       gpuStatusBarItem.backgroundColor = undefined;
+      gpuStatusBarItem.tooltip = undefined;
       diskStatusBarItem.backgroundColor = undefined;
       statusBarsVisible = false;
     },
@@ -395,12 +403,19 @@ export function createStatusBarManager(): StatusBarManager {
       disposeItems();
     },
   };
+
+  function updateGpuTooltipText(nextTooltipText: string): void {
+    if (gpuStatusBarItem.tooltip === undefined || nextTooltipText !== previousGpuTooltipText) {
+      gpuStatusBarItem.tooltip = new vscode.MarkdownString(nextTooltipText);
+      previousGpuTooltipText = nextTooltipText;
+    }
+  }
 }
 
 function formatGpuTooltipLine(device: GpuDeviceSample): string {
   const utilization = device.utilizationPercent !== undefined ? formatPrecisePercent(device.utilizationPercent) : '--';
   const memory = formatGpuMemory(device);
-  return `${formatGpuLabel(device)} · ${utilization} · ${memory}`;
+  return `${formatGpuLabel(device)} · ${formatGpuCategory(device.category)} · ${utilization} · ${memory}`;
 }
 
 function formatGpuLabel(device: GpuDeviceSample): string {
@@ -419,30 +434,64 @@ function formatGpuMemory(device: GpuDeviceSample): string {
   return 'VRAM unavailable';
 }
 
-function formatAggregateGpuPanelMemory(gpu: GpuAggregateSample | undefined): string {
-  if (!gpu) {
-    return '';
+function formatGpuSummaryStatusText(summary: GpuSummarySample): string {
+  if (summary.deviceCount === 0) {
+    return `${summary.label} --`;
   }
 
-  if (gpu.aggregateMemoryUsedBytes !== undefined && gpu.aggregateMemoryTotalBytes !== undefined) {
-    return ` ${formatCompactStorageUsage(gpu.aggregateMemoryUsedBytes, gpu.aggregateMemoryTotalBytes)}`;
+  return `${summary.label} ${formatStatusBarPrecisePercent(summary.utilizationPercent)}${formatGpuSummaryPanelMemory(summary)}`;
+}
+
+function formatGpuSummaryPanelMemory(summary: GpuSummarySample): string {
+  if (summary.memoryUsedBytes !== undefined && summary.memoryTotalBytes !== undefined) {
+    return ` ${formatCompactStorageUsage(summary.memoryUsedBytes, summary.memoryTotalBytes)}`;
   }
 
-  if (gpu.aggregateMemoryUsedBytes !== undefined) {
-    return ` ${formatBytes(gpu.aggregateMemoryUsedBytes)}`;
+  if (summary.memoryUsedBytes !== undefined) {
+    return ` ${formatBytes(summary.memoryUsedBytes)}`;
   }
 
   return '';
 }
 
-function formatAggregateGpuTooltipMemory(gpu: GpuAggregateSample): string {
-  if (gpu.aggregateMemoryUsedBytes !== undefined && gpu.aggregateMemoryTotalBytes !== undefined) {
-    return ` · ${formatStorageUsage(gpu.aggregateMemoryUsedBytes, gpu.aggregateMemoryTotalBytes)} VRAM`;
+function formatGpuSummaryTooltipLine(summary: GpuSummarySample): string {
+  if (summary.deviceCount === 0) {
+    return `${summary.label} unavailable`;
   }
 
-  if (gpu.aggregateMemoryUsedBytes !== undefined) {
-    return ` · ${formatBytes(gpu.aggregateMemoryUsedBytes)} VRAM`;
+  return `${summary.label} · ${formatPrecisePercent(summary.utilizationPercent)}${formatGpuSummaryTooltipMemory(summary)}`;
+}
+
+function formatGpuSummaryTooltipMemory(summary: GpuSummarySample): string {
+  if (summary.memoryUsedBytes !== undefined && summary.memoryTotalBytes !== undefined) {
+    return ` · ${formatStorageUsage(summary.memoryUsedBytes, summary.memoryTotalBytes)} VRAM`;
+  }
+
+  if (summary.memoryUsedBytes !== undefined) {
+    return ` · ${formatBytes(summary.memoryUsedBytes)} VRAM`;
   }
 
   return '';
+}
+
+function appendGpuTooltipSection(lines: string[], title: string, devices: GpuDeviceSample[]): void {
+  if (devices.length === 0) {
+    return;
+  }
+
+  lines.push([
+    `**${title}**`,
+    ...devices.map((device) => `- ${formatGpuTooltipLine(device)}`),
+  ].join('\n'));
+}
+
+function formatGpuCategory(category: GpuDeviceCategory | undefined): string {
+  switch (category) {
+    case 'discrete':
+      return 'dGPU';
+    case 'integrated':
+      return 'iGPU';
+    default:
+      return 'GPU';
+  }
 }

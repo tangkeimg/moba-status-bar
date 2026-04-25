@@ -16,7 +16,30 @@ export type GpuDeviceSample = {
   id: string;
   index: number;
   name: string;
+  category?: GpuDeviceCategory;
   utilizationPercent?: number;
+  memoryUsedBytes?: number;
+  memoryTotalBytes?: number;
+  memoryPercent?: number;
+};
+
+export type GpuDeviceCategory = 'integrated' | 'discrete' | 'unknown';
+
+export type GpuSummaryMode = 'auto' | 'discrete' | 'integrated' | 'all' | 'selected';
+
+export type GpuDisplayConfig = {
+  summaryMode: GpuSummaryMode;
+  selectedDeviceMatchers: string[];
+  categoryOverrides: Record<string, GpuDeviceCategory>;
+};
+
+export type GpuSummarySample = {
+  id: string;
+  label: string;
+  category: GpuDeviceCategory | 'mixed';
+  deviceCount: number;
+  deviceIds: string[];
+  utilizationPercent: number;
   memoryUsedBytes?: number;
   memoryTotalBytes?: number;
   memoryPercent?: number;
@@ -24,6 +47,13 @@ export type GpuDeviceSample = {
 
 export type GpuAggregateSample = {
   devices: GpuDeviceSample[];
+  summary: GpuSummarySample;
+  groups: {
+    all: GpuSummarySample;
+    integrated?: GpuSummarySample;
+    discrete?: GpuSummarySample;
+    unknown?: GpuSummarySample;
+  };
   aggregateUtilizationPercent: number;
   aggregateMemoryUsedBytes?: number;
   aggregateMemoryTotalBytes?: number;

@@ -33,7 +33,7 @@ No setup required. Customize behavior later in Settings if needed.
 ## Features
 
 - **CPU usage with trend graph**: shows real-time CPU usage with a compact trend graph in the status bar.
-- **GPU usage in the status bar**: shows the busiest GPU usage in a single compact item and includes VRAM usage when available. GPU telemetry uses lightweight platform-specific backends, and the tooltip expands all detected GPUs.
+- **GPU usage in the status bar**: shows an automatic GPU summary that prefers discrete GPUs when present, keeps integrated and discrete memory separate, and includes VRAM usage when available. GPU telemetry uses lightweight platform-specific backends, and the tooltip groups all detected GPUs by type.
 - **Memory usage in the status bar**: shows used memory and total memory, for example `8.4GB / 16.0GB`.
 - **Workspace disk usage**: shows usage for the disk that contains your first workspace folder. If no workspace is open, it uses your home directory.
 - **Top CPU processes**: click the CPU item or run the command to see the top 5 CPU-consuming processes.
@@ -49,7 +49,7 @@ After installation, the extension starts automatically when VS Code finishes lau
 | --- | --- | --- |
 | `$(chip)` CPU | Current CPU usage trend and percentage | Click to show top CPU processes |
 | `$(server)` Memory | Used memory / total memory | Click to show top memory processes |
-| `$(device-desktop)` GPU | Busiest GPU utilization and VRAM usage when available; hover to inspect all GPUs | Hover to show per-GPU usage and VRAM data |
+| `$(device-desktop)` GPU | Auto-selected GPU summary usage and VRAM when available; hover to inspect grouped per-GPU details | Click to configure detected GPUs; hover to inspect grouped per-GPU usage and VRAM data |
 | `$(archive)` Disk | Workspace disk label and usage percentage | Hover to view target path and usage |
 
 ## GPU Platform Support
@@ -71,6 +71,7 @@ Open the Command Palette with `Ctrl+Shift+P` / `Cmd+Shift+P` and run:
 | --- | --- |
 | `Moba Status Bar: Show Top CPU Processes` | Shows the top 5 CPU-consuming processes. |
 | `Moba Status Bar: Show Top Memory Processes` | Shows the top 5 memory-consuming processes. |
+| `Moba Status Bar: Configure GPU Display` | Opens a picker for detected GPUs so you can change the GPU summary mode, choose specific GPUs, or override a GPU category without typing device names manually. |
 
 ## Settings
 
@@ -112,6 +113,10 @@ Example `settings.json`:
 }
 ```
 
+Tip: configure GPU display behavior from the GPU status bar item itself or run `Moba Status Bar: Configure GPU Display`, then choose from the detected GPU list.
+
+The GPU display mode, selected devices, and category overrides are stored internally by the extension instead of appearing as public VS Code settings.
+
 ## Notes
 
 - Disk usage is cached and refreshed less often than CPU and memory to keep the extension lightweight.
@@ -120,6 +125,7 @@ Example `settings.json`:
 - Process lists are collected only when you open them.
 - On Windows, process data is collected through PowerShell/CIM. On macOS and Linux, it is collected through `ps`.
 - GPU monitoring supports multiple GPUs in a single item. The tooltip expands every detected device and degrades gracefully when VRAM totals are unavailable or fresh GPU telemetry cannot be read.
+- The GPU configuration command stores exact detected device ids when you pick GPUs interactively, so users normally do not need to know or type the raw GPU names themselves.
 
 ## License
 
