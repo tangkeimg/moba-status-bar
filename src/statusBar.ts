@@ -5,20 +5,23 @@ import {
   MEMORY_STATUS_PRIORITY,
   GPU_STATUS_PRIORITY,
   DISK_STATUS_PRIORITY,
+  NETWORK_STATUS_PRIORITY,
   CPU_STATUS_PRIORITY_LEFT,
   MEMORY_STATUS_PRIORITY_LEFT,
   GPU_STATUS_PRIORITY_LEFT,
   DISK_STATUS_PRIORITY_LEFT,
+  NETWORK_STATUS_PRIORITY_LEFT,
   CPU_STATUS_ITEM_ID,
   MEMORY_STATUS_ITEM_ID,
   GPU_STATUS_ITEM_ID,
   DISK_STATUS_ITEM_ID,
+  NETWORK_STATUS_ITEM_ID,
   CONFIGURE_GPU_DISPLAY_COMMAND,
   SHOW_CPU_PROCESSES_COMMAND,
   SHOW_MEMORY_PROCESSES_COMMAND,
 } from './constants.js';
-import { readAlignment, readCpuTrendGraphConfig, readWarningThresholds } from './config.js';
-import type { ResourceSample, DiskSample, EnabledMonitors, GpuAggregateSample, GpuDeviceCategory, GpuDeviceSample, GpuSummarySample } from './types.js';
+import { readAlignment, readCpuTrendGraphConfig, readShowNetworkUpload, readWarningThresholds } from './config.js';
+import type { ResourceSample, DiskSample, EnabledMonitors, GpuAggregateSample, GpuDeviceCategory, GpuDeviceSample, GpuSummarySample, NetworkSample } from './types.js';
 import {
   formatPercent,
   formatPrecisePercent,
@@ -29,6 +32,7 @@ import {
   calculateMemoryPercent,
   formatCpuTrendGraph,
   formatBytes,
+  formatTransferRate,
 } from './utils.js';
 
 export interface StatusBarManager {
@@ -36,6 +40,7 @@ export interface StatusBarManager {
   readonly memoryStatusBarItem: vscode.StatusBarItem;
   readonly gpuStatusBarItem: vscode.StatusBarItem;
   readonly diskStatusBarItem: vscode.StatusBarItem;
+  readonly networkStatusBarItem: vscode.StatusBarItem;
   createItems(): void;
   update(sample: ResourceSample): void;
   updateCpuTooltip(): void;
@@ -56,11 +61,13 @@ export function createStatusBarManager(): StatusBarManager {
   let memoryStatusBarItem: vscode.StatusBarItem;
   let gpuStatusBarItem: vscode.StatusBarItem;
   let diskStatusBarItem: vscode.StatusBarItem;
+  let networkStatusBarItem: vscode.StatusBarItem;
   let statusBarsVisible = false;
   let previousCpuStatusText: string | undefined;
   let previousMemoryStatusText: string | undefined;
   let previousGpuStatusText: string | undefined;
   let previousDiskStatusText: string | undefined;
+  let previousNetworkStatusText: string | undefined;
   let previousGpuTooltipText: string | undefined;
   let latestCpuPercent = 0;
   let latestMemoryPercent = 0;
@@ -73,7 +80,7 @@ export function createStatusBarManager(): StatusBarManager {
   let previousGpuWarning = false;
   let previousDiskWarning = false;
   let diskTargetPath = '';
-  let enabledMonitors: EnabledMonitors = { cpu: true, memory: true, gpu: true, disk: true };
+  let enabledMonitors: EnabledMonitors = { cpu: true, memory: true, gpu: true, disk: true, network: true };
   let currentAlignment: vscode.StatusBarAlignment | undefined;
 
   function disposeItems(): void {
@@ -81,6 +88,7 @@ export function createStatusBarManager(): StatusBarManager {
     memoryStatusBarItem?.dispose();
     gpuStatusBarItem?.dispose();
     diskStatusBarItem?.dispose();
+    networkStatusBarItem?.dispose();
   }
 
   return {
@@ -95,6 +103,9 @@ export function createStatusBarManager(): StatusBarManager {
     },
     get diskStatusBarItem() {
       return diskStatusBarItem;
+    },
+    get networkStatusBarItem() {
+      return networkStatusBarItem;
     },
 
     createItems() {
@@ -121,6 +132,10 @@ export function createStatusBarManager(): StatusBarManager {
       diskStatusBarItem = vscode.window.createStatusBarItem(DISK_STATUS_ITEM_ID, nextAlignment,
         nextAlignment == vscode.StatusBarAlignment.Right ? DISK_STATUS_PRIORITY : DISK_STATUS_PRIORITY_LEFT);
       diskStatusBarItem.name = 'Moba Disk';
+
+      networkStatusBarItem = vscode.window.createStatusBarItem(NETWORK_STATUS_ITEM_ID, nextAlignment,
+        nextAlignment == vscode.StatusBarAlignment.Right ? NETWORK_STATUS_PRIORITY : NETWORK_STATUS_PRIORITY_LEFT);
+      networkStatusBarItem.name = 'Moba Network';
       statusBarsVisible = false;
     },
 
@@ -199,6 +214,24 @@ export function createStatusBarManager(): StatusBarManager {
         this.updateDiskTooltip(sample.disk);
       }
 
+      if (enabledMonitors.network) {
+        if (sample.network) {
+          const networkStatusText = formatNetworkStatusText(sample.network, readShowNetworkUpload());
+
+          if (networkStatusText !== previousNetworkStatusText) {
+            networkStatusBarItem.text = networkStatusText;
+            previousNetworkStatusText = networkStatusText;
+          }
+
+          networkStatusBarItem.command = undefined;
+          networkStatusBarItem.tooltip = undefined;
+          networkStatusBarItem.show();
+        } else {
+          networkStatusBarItem.hide();
+          previousNetworkStatusText = undefined;
+        }
+      }
+
       if (cpuWarning !== previousCpuWarning) {
         cpuStatusBarItem.backgroundColor = cpuBackgroundColor;
         previousCpuWarning = cpuWarning;
@@ -231,6 +264,9 @@ export function createStatusBarManager(): StatusBarManager {
         }
         if (enabledMonitors.disk) {
           diskStatusBarItem.show();
+        }
+        if (enabledMonitors.network && sample.network) {
+          networkStatusBarItem.show();
         }
         statusBarsVisible = true;
       }
@@ -336,6 +372,11 @@ export function createStatusBarManager(): StatusBarManager {
         previousDiskWarning = false;
       }
 
+      if (!enabledMonitors.network) {
+        networkStatusBarItem.hide();
+        previousNetworkStatusText = undefined;
+      }
+
       statusBarsVisible = false;
     },
 
@@ -348,6 +389,7 @@ export function createStatusBarManager(): StatusBarManager {
       previousMemoryStatusText = undefined;
       previousGpuStatusText = undefined;
       previousDiskStatusText = undefined;
+      previousNetworkStatusText = undefined;
       previousGpuTooltipText = undefined;
       latestCpuPercent = 0;
       latestMemoryPercent = 0;
@@ -364,6 +406,7 @@ export function createStatusBarManager(): StatusBarManager {
       gpuStatusBarItem.backgroundColor = undefined;
       gpuStatusBarItem.tooltip = undefined;
       diskStatusBarItem.backgroundColor = undefined;
+      networkStatusBarItem.tooltip = undefined;
       statusBarsVisible = false;
     },
 
@@ -388,6 +431,9 @@ export function createStatusBarManager(): StatusBarManager {
       if (enabledMonitors.disk) {
         diskStatusBarItem.show();
       }
+      if (enabledMonitors.network && previousNetworkStatusText) {
+        networkStatusBarItem.show();
+      }
       statusBarsVisible = true;
     },
 
@@ -396,6 +442,7 @@ export function createStatusBarManager(): StatusBarManager {
       memoryStatusBarItem.hide();
       gpuStatusBarItem.hide();
       diskStatusBarItem.hide();
+      networkStatusBarItem.hide();
       statusBarsVisible = false;
     },
 
@@ -410,6 +457,16 @@ export function createStatusBarManager(): StatusBarManager {
       previousGpuTooltipText = nextTooltipText;
     }
   }
+}
+
+function formatNetworkStatusText(network: NetworkSample, showUpload: boolean): string {
+  const downloadText = `$(arrow-down) ${formatTransferRate(network.downloadBytesPerSecond)}`;
+
+  if (!showUpload) {
+    return downloadText;
+  }
+
+  return `${downloadText} $(arrow-up) ${formatTransferRate(network.uploadBytesPerSecond)}`;
 }
 
 function formatGpuTooltipLine(device: GpuDeviceSample): string {

@@ -6,10 +6,12 @@ import {
   DEFAULT_GPU_MONITOR_ENABLED,
   DEFAULT_GPU_WARNING_THRESHOLD_PERCENT,
   DEFAULT_DISK_MONITOR_ENABLED,
+  DEFAULT_NETWORK_MONITOR_ENABLED,
   DEFAULT_MEMORY_WARNING_THRESHOLD_PERCENT,
   DEFAULT_DISK_WARNING_THRESHOLD_PERCENT,
   DEFAULT_CPU_TREND_GRAPH_LENGTH,
   DEFAULT_SHOW_CPU_TREND_GRAPH,
+  DEFAULT_SHOW_NETWORK_UPLOAD,
   MAX_CPU_TREND_GRAPH_LENGTH,
   DEFAULT_MEMORY_MONITOR_ENABLED,
   DEFAULT_REFRESH_INTERVAL_MS,
@@ -71,6 +73,11 @@ export function readCpuTrendGraphConfig(): CpuTrendGraphConfig {
   };
 }
 
+export function readShowNetworkUpload(): boolean {
+  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+  return config.get<boolean>('showNetworkUpload', DEFAULT_SHOW_NETWORK_UPLOAD);
+}
+
 export function readEnabledMonitors(): EnabledMonitors {
   const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
 
@@ -79,6 +86,7 @@ export function readEnabledMonitors(): EnabledMonitors {
     memory: config.get<boolean>('memoryEnabled', DEFAULT_MEMORY_MONITOR_ENABLED),
     gpu: config.get<boolean>('gpuEnabled', DEFAULT_GPU_MONITOR_ENABLED),
     disk: config.get<boolean>('diskEnabled', DEFAULT_DISK_MONITOR_ENABLED),
+    network: config.get<boolean>('networkEnabled', DEFAULT_NETWORK_MONITOR_ENABLED),
   };
 }
 

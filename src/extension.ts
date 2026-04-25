@@ -8,6 +8,8 @@ import { createGpuSampler } from './gpu.js';
 import type { GpuSampler } from './gpu.js';
 import { createDiskSampler } from './disk.js';
 import type { DiskSampler } from './disk.js';
+import { createNetworkSampler } from './network.js';
+import type { NetworkSampler } from './network.js';
 import { createStatusBarManager } from './statusBar.js';
 import type { StatusBarManager } from './statusBar.js';
 import { createCommandHandlers } from './commands.js';
@@ -21,8 +23,9 @@ let refreshInProgress = false;
 let statusBarManager: StatusBarManager | undefined;
 let gpuSampler: GpuSampler | undefined;
 let diskSampler: DiskSampler | undefined;
+let networkSampler: NetworkSampler | undefined;
 let commandHandlers: CommandHandlers | undefined;
-let enabledMonitors: EnabledMonitors = { cpu: true, memory: true, gpu: true, disk: true };
+let enabledMonitors: EnabledMonitors = { cpu: true, memory: true, gpu: true, disk: true, network: true };
 let latestGpuSample: GpuAggregateSample | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -35,6 +38,7 @@ export function activate(context: vscode.ExtensionContext): void {
     statusBarManager.memoryStatusBarItem,
     statusBarManager.gpuStatusBarItem,
     statusBarManager.diskStatusBarItem,
+    statusBarManager.networkStatusBarItem,
   );
 
   commandHandlers = createCommandHandlers(
@@ -76,6 +80,7 @@ export function deactivate(): void {
   statusBarManager = undefined;
   gpuSampler = undefined;
   diskSampler = undefined;
+  networkSampler = undefined;
   commandHandlers = undefined;
 }
 
@@ -96,6 +101,7 @@ function applyConfiguration(): void {
   gpuSampler = enabledMonitors.gpu ? createGpuSampler(readGpuDisplayConfig()) : undefined;
   latestGpuSample = undefined;
   diskSampler = undefined;
+  networkSampler = enabledMonitors.network ? createNetworkSampler() : undefined;
 
   if (enabledMonitors.cpu) {
     statusBarManager?.updateCpuTooltip();
@@ -116,7 +122,7 @@ function applyConfiguration(): void {
     statusBarManager?.updateDiskTooltip();
   }
 
-  if (!enabledMonitors.cpu && !enabledMonitors.memory && !enabledMonitors.gpu && !enabledMonitors.disk) {
+  if (!enabledMonitors.cpu && !enabledMonitors.memory && !enabledMonitors.gpu && !enabledMonitors.disk && !enabledMonitors.network) {
     statusBarManager?.hide();
     return;
   }
@@ -170,6 +176,10 @@ async function updateStatusBar(): Promise<void> {
 
     if (enabledMonitors.disk && diskSampler) {
       sample.disk = await diskSampler.readSample();
+    }
+
+    if (enabledMonitors.network && networkSampler) {
+      sample.network = await networkSampler.readSample();
     }
 
     if (!statusBarManager) {

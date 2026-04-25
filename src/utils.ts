@@ -82,6 +82,23 @@ export function formatBytes(bytes: number): string {
   return `${Math.max(0, bytes).toFixed(0)}B`;
 }
 
+export function formatTransferRate(bytesPerSecond: number): string {
+  const units = ['B', 'K', 'M', 'G'] as const;
+  let unitIndex = 0;
+  let normalizedValue = Math.max(0, bytesPerSecond);
+
+  while (unitIndex < units.length - 1 && normalizedValue >= 999.5) {
+    normalizedValue /= 1024;
+    unitIndex += 1;
+  }
+
+  const valueText = normalizedValue >= 100
+    ? Math.round(normalizedValue).toString()
+    : normalizedValue.toFixed(1);
+
+  return `${valueText.padStart(4, FIGURE_SPACE)}${units[unitIndex]}/s`;
+}
+
 export function formatStorageUsage(usedBytes: number, totalBytes: number): string {
   return `${formatGigabytes(usedBytes)}GB / ${formatGigabytes(totalBytes)}GB`;
 }

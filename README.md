@@ -4,9 +4,9 @@
 
 # Moba Status Bar
 
-CPU, GPU, memory, and disk usage monitor with a compact trend graph in the VS Code status bar.
+CPU, GPU, memory, disk, and network usage monitor with a compact trend graph in the VS Code status bar.
 
-Keep system resource usage visible at all times without leaving your editor. Moba Status Bar shows live CPU, GPU, memory, and disk usage directly in the status bar, with a built-in trend graph and one-click access to top resource-consuming processes.
+Keep system resource usage visible at all times without leaving your editor. Moba Status Bar shows live CPU, GPU, memory, disk, and network usage directly in the status bar, with a built-in trend graph and one-click access to top resource-consuming processes.
 
 [View on Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=tangkeimg.moba-status-bar)
 
@@ -20,13 +20,14 @@ Keep system resource usage visible at all times without leaving your editor. Mob
 - **GPU usage with multi-GPU tooltip**
 - **Memory usage at a glance**
 - **Disk usage for current workspace**
+- **Network download speed in one compact, stable-width item**
 - **One-click process inspection** (CPU & memory)
 - **Automatic warning highlights** when usage is high
 - **Lightweight and configurable**
 
 ## Quick Start
 
-Install the extension and CPU, GPU, memory, and disk usage will appear automatically in the status bar when supported by your machine and platform.
+Install the extension and CPU, GPU, memory, disk, and network usage will appear automatically in the status bar when supported by your machine and platform.
 
 No setup required. Customize behavior later in Settings if needed.
 
@@ -36,6 +37,7 @@ No setup required. Customize behavior later in Settings if needed.
 - **GPU usage in the status bar**: shows an automatic GPU summary that prefers discrete GPUs when present, keeps integrated and discrete memory separate, and includes VRAM usage when available. GPU telemetry uses lightweight platform-specific backends, and the tooltip groups all detected GPUs by type.
 - **Memory usage in the status bar**: shows used memory and total memory, for example `8.4GB / 16.0GB`.
 - **Workspace disk usage**: shows usage for the disk that contains your first workspace folder. If no workspace is open, it uses your home directory.
+- **Network usage in the status bar**: shows live download speed in a compact fixed-width item. Upload speed is available as an optional setting and stays off by default to keep the status bar narrow.
 - **Top CPU processes**: click the CPU item or run the command to see the top 5 CPU-consuming processes.
 - **Top memory processes**: click the memory item or run the command to see the top 5 memory-consuming processes.
 - **Warning highlights**: CPU, GPU, memory, and disk items can highlight automatically when usage reaches your configured threshold.
@@ -51,6 +53,7 @@ After installation, the extension starts automatically when VS Code finishes lau
 | `$(server)` Memory | Used memory / total memory | Click to show top memory processes |
 | `$(device-desktop)` GPU | Auto-selected GPU summary usage and VRAM when available; hover to inspect grouped per-GPU details | Click to configure detected GPUs; hover to inspect grouped per-GPU usage and VRAM data |
 | `$(archive)` Disk | Workspace disk label and usage percentage | Hover to view target path and usage |
+| `$(arrow-down)` Network | Current fixed-width download speed; optional upload speed can be enabled in settings | No action |
 
 ## GPU Platform Support
 
@@ -62,6 +65,17 @@ GPU monitoring is best-effort and never blocks the rest of the status bar. If GP
 | Linux | `nvidia-smi` for NVIDIA GPUs, or `rocm-smi` for AMD ROCm GPUs when installed | Shows utilization and VRAM from the available vendor tool. Missing tools, driver errors, command timeouts, or parse failures fall back to no GPU item. |
 | macOS | No lightweight built-in GPU telemetry backend | GPU monitoring falls back to hidden; the extension does not error or stop refreshing other monitors. |
 | Other platforms | None | GPU monitoring falls back to hidden. |
+
+## Network Platform Support
+
+Network monitoring is intentionally compact and lightweight. It samples the most relevant active network interface, keeps upload speed hidden by default so the status bar stays narrow, and formats the rate display to stay visually stable as values change.
+
+| Platform | Backend | Behavior |
+| --- | --- | --- |
+| Windows | PowerShell `Get-NetAdapterStatistics` | Shows the busiest active interface, focused on download speed by default. |
+| Linux | `/proc/net/dev` | Shows the busiest active interface, focused on download speed by default. |
+| macOS | No lightweight built-in backend yet | Network monitoring falls back to hidden. |
+| Other platforms | None | Network monitoring falls back to hidden. |
 
 ## Commands
 
@@ -89,6 +103,8 @@ You can configure Moba Status Bar from VS Code settings.
 | `mobaStatusBar.gpuWarningThresholdPercent` | `90` | Highlight the GPU item when GPU usage is at or above this percentage. |
 | `mobaStatusBar.diskEnabled` | `true` | Enable disk monitoring. When disabled, disk usage is not sampled. |
 | `mobaStatusBar.diskWarningThresholdPercent` | `85` | Highlight the disk item when disk usage is at or above this percentage. |
+| `mobaStatusBar.networkEnabled` | `true` | Enable network monitoring. When disabled, network throughput is not sampled. |
+| `mobaStatusBar.showNetworkUpload` | `false` | Show upload speed alongside download speed in the network item. |
 | `mobaStatusBar.refreshIntervalMs` | `1000` | Enabled monitor refresh interval in milliseconds. Values below `500` are clamped to `500`. |
 | `mobaStatusBar.alignment` | `right` | Place the status bar items on the `left` or `right` side of the VS Code status bar. |
 | `mobaStatusBar.enabled` | `true` | Enable or disable the status bar monitor. |
@@ -107,6 +123,8 @@ Example `settings.json`:
   "mobaStatusBar.gpuWarningThresholdPercent": 90,
   "mobaStatusBar.diskEnabled": true,
   "mobaStatusBar.diskWarningThresholdPercent": 80,
+  "mobaStatusBar.networkEnabled": true,
+  "mobaStatusBar.showNetworkUpload": false,
   "mobaStatusBar.refreshIntervalMs": 1500,
   "mobaStatusBar.alignment": "right",
   "mobaStatusBar.enabled": true
@@ -120,6 +138,7 @@ The GPU display mode, selected devices, and category overrides are stored intern
 ## Notes
 
 - Disk usage is cached and refreshed less often than CPU and memory to keep the extension lightweight.
+- Network usage is sampled with a lightweight backend and an adaptive cache so it does not spawn a new probe on every status-bar refresh.
 - GPU monitoring uses the lightest available backend for the current platform. On unsupported systems or when runtime GPU telemetry is unavailable, the GPU item stays hidden.
 - Disabled monitors are not sampled in the refresh loop.
 - Process lists are collected only when you open them.

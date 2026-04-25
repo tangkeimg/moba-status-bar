@@ -10,6 +10,7 @@ export type ResourceSample = {
   memoryTotalBytes?: number;
   gpu?: GpuAggregateSample;
   disk?: DiskSample;
+  network?: NetworkSample;
 };
 
 export type GpuDeviceSample = {
@@ -79,6 +80,12 @@ export type DiskSample = {
   diskTotalBytes: number;
 };
 
+export type NetworkSample = {
+  interfaceName: string;
+  downloadBytesPerSecond: number;
+  uploadBytesPerSecond: number;
+};
+
 export type WarningThresholds = {
   cpuPercent: number;
   memoryPercent: number;
@@ -96,4 +103,5 @@ export type EnabledMonitors = {
   memory: boolean;
   gpu: boolean;
   disk: boolean;
+  network: boolean;
 };

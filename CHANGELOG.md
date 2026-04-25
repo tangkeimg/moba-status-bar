@@ -4,6 +4,22 @@ All notable changes to the "Moba Status Bar" extension will be documented in thi
 
 <!-- markdownlint-disable MD024 -->
 
+## [1.3.0] - 2026-04-25
+
+### Added
+
+- Added lightweight network monitoring for Windows and Linux, with active-interface selection and adaptive sampling.
+- Added a compact network status bar item that shows download throughput by default and can optionally include upload throughput.
+
+### Changed
+
+- Documented network monitoring support, settings, and platform behavior in the README.
+- Kept the network item focused on a tooltip-free compact display so it uses less status bar space by default.
+
+### Fixed
+
+- Fixed network rate rendering to use a stable-width status text so normal value changes do not resize the item.
+
 ## [1.2.7] - 2026-04-25
 
 ### Added
