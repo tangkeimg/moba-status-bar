@@ -48,6 +48,14 @@ export function formatPercent(value: number): string {
   return `${Math.round(clampPercent(value)).toString().padStart(2, FIGURE_SPACE)}%`;
 }
 
+export function formatPrecisePercent(value: number): string {
+  return `${clampPercent(value).toFixed(1)}%`;
+}
+
+export function formatStatusBarPrecisePercent(value: number): string {
+  return `${clampPercent(value).toFixed(1).padStart(4, FIGURE_SPACE)}%`;
+}
+
 export function formatCpuTrendGraph(samples: number[], length: number): string {
   const normalizedLength = Math.max(0, Math.round(length));
   const visibleSamples = samples.slice(-length);
@@ -76,6 +84,10 @@ export function formatBytes(bytes: number): string {
 
 export function formatStorageUsage(usedBytes: number, totalBytes: number): string {
   return `${formatGigabytes(usedBytes)}GB / ${formatGigabytes(totalBytes)}GB`;
+}
+
+export function formatCompactStorageUsage(usedBytes: number, totalBytes: number): string {
+  return `${formatGigabytes(usedBytes)}/${formatGigabytes(totalBytes)}G`;
 }
 
 export function formatDiskUsage(disk: DiskSample): string {
