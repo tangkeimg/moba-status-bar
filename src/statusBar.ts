@@ -80,7 +80,7 @@ export function createStatusBarManager(): StatusBarManager {
   let previousGpuWarning = false;
   let previousDiskWarning = false;
   let diskTargetPath = '';
-  let enabledMonitors: EnabledMonitors = { cpu: true, memory: true, gpu: true, disk: true, network: true };
+  let enabledMonitors: EnabledMonitors = { cpu: true, memory: true, gpu: true, disk: true, network: false };
   let currentAlignment: vscode.StatusBarAlignment | undefined;
 
   function disposeItems(): void {

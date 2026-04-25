@@ -15,6 +15,7 @@ All notable changes to the "Moba Status Bar" extension will be documented in thi
 
 - Documented network monitoring support, settings, and platform behavior in the README.
 - Kept the network item focused on a tooltip-free compact display so it uses less status bar space by default.
+- Changed network monitoring to stay hidden by default unless `mobaStatusBar.networkEnabled` is turned on.
 
 ### Fixed
 

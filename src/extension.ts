@@ -25,7 +25,7 @@ let gpuSampler: GpuSampler | undefined;
 let diskSampler: DiskSampler | undefined;
 let networkSampler: NetworkSampler | undefined;
 let commandHandlers: CommandHandlers | undefined;
-let enabledMonitors: EnabledMonitors = { cpu: true, memory: true, gpu: true, disk: true, network: true };
+let enabledMonitors: EnabledMonitors = { cpu: true, memory: true, gpu: true, disk: true, network: false };
 let latestGpuSample: GpuAggregateSample | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {

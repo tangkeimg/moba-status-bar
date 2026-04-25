@@ -132,9 +132,9 @@
         },
         "mobaStatusBar.networkEnabled": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "order": 10,
-          "description": "Enable network monitoring. When disabled, network throughput is not sampled."
+          "description": "Enable network monitoring. Disabled by default so the network item stays hidden unless you opt in."
         },
         "mobaStatusBar.showNetworkUpload": {
           "type": "boolean",
