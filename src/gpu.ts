@@ -12,6 +12,7 @@ const ACTIVE_GPU_MEMORY_THRESHOLD_BYTES = 1024 ** 3;
 const ACTIVE_GPU_MEMORY_THRESHOLD_PERCENT = 10;
 
 type GpuBackend = 'windows-counters' | 'linux-nvidia-smi' | 'linux-rocm-smi' | 'none';
+type LinuxGpuBackend = Extract<GpuBackend, 'linux-nvidia-smi' | 'linux-rocm-smi'>;
 
 type GpuCounterSampleRow = {
   InstanceName?: string;
@@ -40,6 +41,61 @@ export function createGpuSampler(displayConfig: GpuDisplayConfig): GpuSampler {
   let nextMemoryRefreshAt = 0;
   let cachedSample: GpuAggregateSample | undefined;
   let windowsMetadataPromise: Promise<WindowsGpuMetadata[]> | undefined;
+  const linuxBackendAvailability = new Map<LinuxGpuBackend, Promise<boolean>>();
+
+  function isLinuxBackendAvailable(backend: LinuxGpuBackend): Promise<boolean> {
+    const cachedAvailability = linuxBackendAvailability.get(backend);
+
+    if (cachedAvailability) {
+      return cachedAvailability;
+    }
+
+    const command = backend === 'linux-nvidia-smi' ? 'nvidia-smi' : 'rocm-smi';
+    const availabilityPromise = commandExists(command);
+    linuxBackendAvailability.set(backend, availabilityPromise);
+    return availabilityPromise;
+  }
+
+  async function readLinuxGpuSampleForBackend(backend: LinuxGpuBackend): Promise<GpuAggregateSample | undefined> {
+    switch (backend) {
+      case 'linux-nvidia-smi':
+        return await readNvidiaSmiGpuSample(displayConfig);
+      case 'linux-rocm-smi': {
+        const result = await readRocmSmiGpuSample(cachedMemoryByDeviceId, nextMemoryRefreshAt, displayConfig);
+        cachedMemoryByDeviceId = result.memoryCache;
+        nextMemoryRefreshAt = result.nextMemoryRefreshAt;
+        return result.sample;
+      }
+    }
+  }
+
+  async function readLinuxGpuSample(preferredBackend: LinuxGpuBackend): Promise<GpuAggregateSample | undefined> {
+    const fallbackBackend: LinuxGpuBackend = preferredBackend === 'linux-nvidia-smi' ? 'linux-rocm-smi' : 'linux-nvidia-smi';
+
+    for (const backend of [preferredBackend, fallbackBackend]) {
+      if (backend !== preferredBackend && !(await isLinuxBackendAvailable(backend))) {
+        continue;
+      }
+
+      try {
+        const sample = await readLinuxGpuSampleForBackend(backend);
+
+        if (!sample) {
+          continue;
+        }
+
+        if (backend !== preferredBackend) {
+          backendPromise = Promise.resolve(backend);
+        }
+
+        return sample;
+      } catch {
+        continue;
+      }
+    }
+
+    return undefined;
+  }
 
   return {
     async readSample() {
@@ -63,19 +119,9 @@ export function createGpuSampler(displayConfig: GpuDisplayConfig): GpuSampler {
             cachedSample = await readWindowsGpuSample(cachedSample, windowsMetadataPromise, displayConfig) ?? cachedSample;
             return cachedSample;
           case 'linux-nvidia-smi':
-            cachedSample = await readNvidiaSmiGpuSample(displayConfig) ?? cachedSample;
-            return cachedSample;
           case 'linux-rocm-smi':
-            return await readRocmSmiGpuSample(cachedMemoryByDeviceId, nextMemoryRefreshAt, displayConfig).then((result) => {
-              if (result) {
-                cachedMemoryByDeviceId = result.memoryCache;
-                nextMemoryRefreshAt = result.nextMemoryRefreshAt;
-                cachedSample = result.sample ?? cachedSample;
-                return cachedSample;
-              }
-
-              return cachedSample;
-            });
+            cachedSample = await readLinuxGpuSample(backend) ?? cachedSample;
+            return cachedSample;
           default:
             return cachedSample;
         }
@@ -89,6 +135,7 @@ export function createGpuSampler(displayConfig: GpuDisplayConfig): GpuSampler {
       cachedSample = undefined;
       nextMemoryRefreshAt = 0;
       windowsMetadataPromise = undefined;
+      linuxBackendAvailability.clear();
     },
   };
 }
@@ -238,7 +285,8 @@ async function readRocmSmiGpuSample(
 
   const parsed = JSON.parse(raw) as Record<string, Record<string, string>>;
   const devices: GpuDeviceSample[] = [];
-  const nextMemoryCache = Date.now() >= nextMemoryRefreshAt ? new Map<string, Pick<GpuDeviceSample, 'memoryUsedBytes' | 'memoryTotalBytes' | 'memoryPercent'>>() : cachedMemoryByDeviceId;
+  const shouldRefreshMemory = Date.now() >= nextMemoryRefreshAt;
+  const nextMemoryCache = shouldRefreshMemory ? new Map<string, Pick<GpuDeviceSample, 'memoryUsedBytes' | 'memoryTotalBytes' | 'memoryPercent'>>() : cachedMemoryByDeviceId;
 
   for (const [deviceKey, values] of Object.entries(parsed)) {
     const indexMatch = deviceKey.match(/\d+/);
@@ -250,7 +298,7 @@ async function readRocmSmiGpuSample(
     let memoryUsedBytes = cachedMemoryByDeviceId.get(id)?.memoryUsedBytes;
     let memoryTotalBytes = cachedMemoryByDeviceId.get(id)?.memoryTotalBytes;
 
-    if (Date.now() >= nextMemoryRefreshAt) {
+    if (shouldRefreshMemory) {
       memoryUsedBytes = parseByteField(values, ['VRAM Total Used Memory (B)', 'VRAM Total Used Memory (bytes)']);
       memoryTotalBytes = parseByteField(values, ['VRAM Total Memory (B)', 'VRAM Total Memory (bytes)']);
 
@@ -281,7 +329,7 @@ async function readRocmSmiGpuSample(
   return {
     sample: createAggregateGpuSample(devices, displayConfig),
     memoryCache: nextMemoryCache,
-    nextMemoryRefreshAt: Date.now() + GPU_MEMORY_REFRESH_MS,
+    nextMemoryRefreshAt: shouldRefreshMemory ? Date.now() + GPU_MEMORY_REFRESH_MS : nextMemoryRefreshAt,
   };
 }
 
