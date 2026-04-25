@@ -12,7 +12,7 @@ Keep system resource usage visible at all times without leaving your editor. Mob
 
 ## Preview
 
-![Moba Status Bar preview](./pic.png)
+![Moba Status Bar preview](./pic.gif)
 
 ## Why Moba Status Bar?
 
