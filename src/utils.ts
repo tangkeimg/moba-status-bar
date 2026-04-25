@@ -83,18 +83,25 @@ export function formatBytes(bytes: number): string {
 }
 
 export function formatTransferRate(bytesPerSecond: number): string {
-  const units = ['B', 'K', 'M', 'G'] as const;
+  const units = ['K', 'M', 'G'] as const;
   let unitIndex = 0;
-  let normalizedValue = Math.max(0, bytesPerSecond);
+  let normalizedValue = Number.isFinite(bytesPerSecond) && bytesPerSecond > 0
+    ? bytesPerSecond / 1024
+    : 0;
 
   while (unitIndex < units.length - 1 && normalizedValue >= 999.5) {
     normalizedValue /= 1024;
     unitIndex += 1;
   }
 
-  const valueText = normalizedValue >= 100
-    ? Math.round(normalizedValue).toString()
-    : normalizedValue.toFixed(1);
+  let valueText: string;
+  if (normalizedValue < 0.05) {
+    valueText = '0';
+  } else if (normalizedValue >= 100) {
+    valueText = Math.round(normalizedValue).toString();
+  } else {
+    valueText = normalizedValue.toFixed(1);
+  }
 
   return `${valueText.padStart(4, FIGURE_SPACE)}${units[unitIndex]}/s`;
 }
