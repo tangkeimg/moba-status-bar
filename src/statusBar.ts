@@ -11,11 +11,6 @@ import {
   GPU_STATUS_PRIORITY_LEFT,
   DISK_STATUS_PRIORITY_LEFT,
   NETWORK_STATUS_PRIORITY_LEFT,
-  CPU_STATUS_ITEM_ID,
-  MEMORY_STATUS_ITEM_ID,
-  GPU_STATUS_ITEM_ID,
-  DISK_STATUS_ITEM_ID,
-  NETWORK_STATUS_ITEM_ID,
   CONFIGURE_GPU_DISPLAY_COMMAND,
   SHOW_CPU_PROCESSES_COMMAND,
   SHOW_MEMORY_PROCESSES_COMMAND,
@@ -56,6 +51,13 @@ export interface StatusBarManager {
   dispose(): void;
 }
 
+type StatusBarItemState = {
+  text: vscode.StatusBarItem['text'];
+  tooltip: vscode.StatusBarItem['tooltip'];
+  command: vscode.StatusBarItem['command'];
+  backgroundColor: vscode.StatusBarItem['backgroundColor'];
+};
+
 export function createStatusBarManager(): StatusBarManager {
   let cpuStatusBarItem: vscode.StatusBarItem;
   let memoryStatusBarItem: vscode.StatusBarItem;
@@ -91,6 +93,26 @@ export function createStatusBarManager(): StatusBarManager {
     networkStatusBarItem?.dispose();
   }
 
+  function captureItemState(item: vscode.StatusBarItem): StatusBarItemState {
+    return {
+      text: item.text,
+      tooltip: item.tooltip,
+      command: item.command,
+      backgroundColor: item.backgroundColor,
+    };
+  }
+
+  function restoreItemState(item: vscode.StatusBarItem, state: StatusBarItemState | undefined): void {
+    if (!state) {
+      return;
+    }
+
+    item.text = state.text;
+    item.tooltip = state.tooltip;
+    item.command = state.command;
+    item.backgroundColor = state.backgroundColor;
+  }
+
   return {
     get cpuStatusBarItem() {
       return cpuStatusBarItem;
@@ -115,50 +137,71 @@ export function createStatusBarManager(): StatusBarManager {
         return;
       }
 
+      const previousItems = currentAlignment === undefined ? undefined : {
+        cpu: captureItemState(cpuStatusBarItem),
+        memory: captureItemState(memoryStatusBarItem),
+        gpu: captureItemState(gpuStatusBarItem),
+        disk: captureItemState(diskStatusBarItem),
+        network: captureItemState(networkStatusBarItem),
+      };
+      const wasVisible = statusBarsVisible;
+
       disposeItems();
       currentAlignment = nextAlignment;
-      cpuStatusBarItem = vscode.window.createStatusBarItem(CPU_STATUS_ITEM_ID, nextAlignment,
+      cpuStatusBarItem = vscode.window.createStatusBarItem(nextAlignment,
         nextAlignment == vscode.StatusBarAlignment.Right ? CPU_STATUS_PRIORITY : CPU_STATUS_PRIORITY_LEFT);
       cpuStatusBarItem.name = 'Moba CPU';
 
-      memoryStatusBarItem = vscode.window.createStatusBarItem(MEMORY_STATUS_ITEM_ID, nextAlignment,
+      memoryStatusBarItem = vscode.window.createStatusBarItem(nextAlignment,
         nextAlignment == vscode.StatusBarAlignment.Right ? MEMORY_STATUS_PRIORITY : MEMORY_STATUS_PRIORITY_LEFT);
       memoryStatusBarItem.name = 'Moba Memory';
 
-      gpuStatusBarItem = vscode.window.createStatusBarItem(GPU_STATUS_ITEM_ID, nextAlignment,
+      gpuStatusBarItem = vscode.window.createStatusBarItem(nextAlignment,
         nextAlignment == vscode.StatusBarAlignment.Right ? GPU_STATUS_PRIORITY : GPU_STATUS_PRIORITY_LEFT);
       gpuStatusBarItem.name = 'Moba GPU';
 
-      diskStatusBarItem = vscode.window.createStatusBarItem(DISK_STATUS_ITEM_ID, nextAlignment,
+      diskStatusBarItem = vscode.window.createStatusBarItem(nextAlignment,
         nextAlignment == vscode.StatusBarAlignment.Right ? DISK_STATUS_PRIORITY : DISK_STATUS_PRIORITY_LEFT);
       diskStatusBarItem.name = 'Moba Disk';
 
-      networkStatusBarItem = vscode.window.createStatusBarItem(NETWORK_STATUS_ITEM_ID, nextAlignment,
+      networkStatusBarItem = vscode.window.createStatusBarItem(nextAlignment,
         nextAlignment == vscode.StatusBarAlignment.Right ? NETWORK_STATUS_PRIORITY : NETWORK_STATUS_PRIORITY_LEFT);
       networkStatusBarItem.name = 'Moba Network';
       statusBarsVisible = false;
+
+      restoreItemState(cpuStatusBarItem, previousItems?.cpu);
+      restoreItemState(memoryStatusBarItem, previousItems?.memory);
+      restoreItemState(gpuStatusBarItem, previousItems?.gpu);
+      restoreItemState(diskStatusBarItem, previousItems?.disk);
+      restoreItemState(networkStatusBarItem, previousItems?.network);
+
+      if (wasVisible) {
+        this.show();
+      }
     },
 
     update(sample: ResourceSample) {
       const thresholds = readWarningThresholds();
-      const cpuWarning = enabledMonitors.cpu && sample.cpuPercent !== undefined ? sample.cpuPercent >= thresholds.cpuPercent : false;
-      const memoryWarning = enabledMonitors.memory && sample.memoryPercent !== undefined ? sample.memoryPercent >= thresholds.memoryPercent : false;
-      const gpuWarning = enabledMonitors.gpu && sample.gpu ? sample.gpu.summary.utilizationPercent >= thresholds.gpuPercent : false;
-      const diskWarning = sample.disk ? sample.disk.diskPercent >= thresholds.diskPercent : false;
+      const hasCpuSample = enabledMonitors.cpu && sample.cpuPercent !== undefined;
+      const hasMemorySample = enabledMonitors.memory && sample.memoryPercent !== undefined && sample.memoryUsedBytes !== undefined && sample.memoryTotalBytes !== undefined;
+      const hasGpuSample = enabledMonitors.gpu && hasSampleProperty(sample, 'gpu');
+      const hasDiskSample = enabledMonitors.disk && hasSampleProperty(sample, 'disk');
+      const hasNetworkSample = enabledMonitors.network && hasSampleProperty(sample, 'network');
 
-      if (enabledMonitors.cpu && sample.cpuPercent !== undefined) {
-        latestCpuPercent = sample.cpuPercent;
+      if (hasCpuSample) {
+        const cpuPercent = sample.cpuPercent!;
+        latestCpuPercent = cpuPercent;
         const cpuTrendGraphConfig = readCpuTrendGraphConfig();
         let cpuTrendGraph = '';
 
         if (cpuTrendGraphConfig.enabled) {
-          cpuHistory = [...cpuHistory, sample.cpuPercent].slice(-cpuTrendGraphConfig.length);
+          cpuHistory = [...cpuHistory, cpuPercent].slice(-cpuTrendGraphConfig.length);
           cpuTrendGraph = ` ${formatCpuTrendGraph(cpuHistory, cpuTrendGraphConfig.length)}`;
         } else if (cpuHistory.length > 0) {
           cpuHistory = [];
         }
 
-        const cpuStatusText = `$(chip) ${formatPercent(sample.cpuPercent)}${cpuTrendGraph}`;
+        const cpuStatusText = `$(chip) ${formatPercent(cpuPercent)}${cpuTrendGraph}`;
 
         if (cpuStatusText !== previousCpuStatusText) {
           cpuStatusBarItem.text = cpuStatusText;
@@ -168,11 +211,14 @@ export function createStatusBarManager(): StatusBarManager {
         cpuStatusBarItem.command = SHOW_CPU_PROCESSES_COMMAND;
       }
 
-      if (enabledMonitors.memory && sample.memoryPercent !== undefined && sample.memoryUsedBytes !== undefined && sample.memoryTotalBytes !== undefined) {
-        latestMemoryPercent = sample.memoryPercent;
-        latestMemoryUsedBytes = sample.memoryUsedBytes;
-        latestMemoryTotalBytes = sample.memoryTotalBytes;
-        const memoryStatusText = `$(server) ${formatStorageUsage(sample.memoryUsedBytes, sample.memoryTotalBytes)}`;
+      if (hasMemorySample) {
+        const memoryPercent = sample.memoryPercent!;
+        const memoryUsedBytes = sample.memoryUsedBytes!;
+        const memoryTotalBytes = sample.memoryTotalBytes!;
+        latestMemoryPercent = memoryPercent;
+        latestMemoryUsedBytes = memoryUsedBytes;
+        latestMemoryTotalBytes = memoryTotalBytes;
+        const memoryStatusText = `$(server) ${formatStorageUsage(memoryUsedBytes, memoryTotalBytes)}`;
 
         if (memoryStatusText !== previousMemoryStatusText) {
           memoryStatusBarItem.text = memoryStatusText;
@@ -182,7 +228,7 @@ export function createStatusBarManager(): StatusBarManager {
         memoryStatusBarItem.command = SHOW_MEMORY_PROCESSES_COMMAND;
       }
 
-      if (enabledMonitors.gpu) {
+      if (hasGpuSample) {
         latestGpu = sample.gpu;
 
         if (sample.gpu) {
@@ -202,19 +248,15 @@ export function createStatusBarManager(): StatusBarManager {
         }
       }
 
-      const diskStatusText = enabledMonitors.disk && sample.disk ? `$(archive) ${formatDiskUsage(sample.disk)}` : '$(archive) --';
-      const cpuBackgroundColor = cpuWarning ? new vscode.ThemeColor('statusBarItem.errorBackground') : undefined;
-      const memoryBackgroundColor = memoryWarning ? new vscode.ThemeColor('statusBarItem.errorBackground') : undefined;
-      const gpuBackgroundColor = gpuWarning ? new vscode.ThemeColor('statusBarItem.errorBackground') : undefined;
-      const diskBackgroundColor = diskWarning ? new vscode.ThemeColor('statusBarItem.warningBackground') : undefined;
-
-      if (enabledMonitors.disk && diskStatusText !== previousDiskStatusText) {
+      if (hasDiskSample) {
+        const diskStatusText = sample.disk ? `$(archive) ${formatDiskUsage(sample.disk)}` : '$(archive) --';
         diskStatusBarItem.text = diskStatusText;
         previousDiskStatusText = diskStatusText;
         this.updateDiskTooltip(sample.disk);
+        diskStatusBarItem.show();
       }
 
-      if (enabledMonitors.network) {
+      if (hasNetworkSample) {
         if (sample.network) {
           const networkStatusText = formatNetworkStatusText(sample.network, readShowNetworkUpload());
 
@@ -232,22 +274,30 @@ export function createStatusBarManager(): StatusBarManager {
         }
       }
 
-      if (cpuWarning !== previousCpuWarning) {
+      if (hasCpuSample) {
+        const cpuWarning = sample.cpuPercent! >= thresholds.cpuPercent;
+        const cpuBackgroundColor = cpuWarning ? new vscode.ThemeColor('statusBarItem.errorBackground') : undefined;
         cpuStatusBarItem.backgroundColor = cpuBackgroundColor;
         previousCpuWarning = cpuWarning;
       }
 
-      if (memoryWarning !== previousMemoryWarning) {
+      if (hasMemorySample) {
+        const memoryWarning = sample.memoryPercent! >= thresholds.memoryPercent;
+        const memoryBackgroundColor = memoryWarning ? new vscode.ThemeColor('statusBarItem.errorBackground') : undefined;
         memoryStatusBarItem.backgroundColor = memoryBackgroundColor;
         previousMemoryWarning = memoryWarning;
       }
 
-      if (gpuWarning !== previousGpuWarning) {
+      if (hasGpuSample) {
+        const gpuWarning = sample.gpu ? sample.gpu.summary.utilizationPercent >= thresholds.gpuPercent : false;
+        const gpuBackgroundColor = gpuWarning ? new vscode.ThemeColor('statusBarItem.errorBackground') : undefined;
         gpuStatusBarItem.backgroundColor = gpuBackgroundColor;
         previousGpuWarning = gpuWarning;
       }
 
-      if (diskWarning !== previousDiskWarning) {
+      if (hasDiskSample) {
+        const diskWarning = sample.disk ? sample.disk.diskPercent >= thresholds.diskPercent : false;
+        const diskBackgroundColor = diskWarning ? new vscode.ThemeColor('statusBarItem.warningBackground') : undefined;
         diskStatusBarItem.backgroundColor = diskBackgroundColor;
         previousDiskWarning = diskWarning;
       }
@@ -262,10 +312,10 @@ export function createStatusBarManager(): StatusBarManager {
         if (enabledMonitors.gpu && sample.gpu) {
           gpuStatusBarItem.show();
         }
-        if (enabledMonitors.disk) {
+        if (enabledMonitors.disk && previousDiskStatusText !== undefined) {
           diskStatusBarItem.show();
         }
-        if (enabledMonitors.network && sample.network) {
+        if (enabledMonitors.network && previousNetworkStatusText !== undefined) {
           networkStatusBarItem.show();
         }
         statusBarsVisible = true;
@@ -457,6 +507,10 @@ export function createStatusBarManager(): StatusBarManager {
       previousGpuTooltipText = nextTooltipText;
     }
   }
+}
+
+function hasSampleProperty(sample: ResourceSample, key: keyof ResourceSample): boolean {
+  return Object.prototype.hasOwnProperty.call(sample, key);
 }
 
 function formatNetworkStatusText(network: NetworkSample, showUpload: boolean): string {

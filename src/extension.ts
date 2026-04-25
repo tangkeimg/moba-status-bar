@@ -19,7 +19,8 @@ import type { CpuSnapshot, EnabledMonitors, GpuAggregateSample, ResourceSample }
 
 let refreshTimer: NodeJS.Timeout | undefined;
 let previousCpuSnapshot: CpuSnapshot | undefined;
-let refreshInProgress = false;
+let activeConfigurationGeneration = 0;
+let refreshInProgressGeneration: number | undefined;
 let statusBarManager: StatusBarManager | undefined;
 let gpuSampler: GpuSampler | undefined;
 let diskSampler: DiskSampler | undefined;
@@ -75,6 +76,8 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {
+  activeConfigurationGeneration += 1;
+  refreshInProgressGeneration = undefined;
   stopRefreshing();
   statusBarManager?.dispose();
   statusBarManager = undefined;
@@ -85,6 +88,8 @@ export function deactivate(): void {
 }
 
 function applyConfiguration(): void {
+  activeConfigurationGeneration += 1;
+  refreshInProgressGeneration = undefined;
   stopRefreshing();
 
   if (!isExtensionEnabled()) {
@@ -147,47 +152,88 @@ async function updateStatusBar(): Promise<void> {
     return;
   }
 
-  if (refreshInProgress) {
+  const generation = activeConfigurationGeneration;
+
+  if (refreshInProgressGeneration === generation) {
     return;
   }
 
-  refreshInProgress = true;
+  refreshInProgressGeneration = generation;
 
   try {
-    const sample: ResourceSample = {};
+    const monitors = enabledMonitors;
+    const gpuSamplerForUpdate = gpuSampler;
+    const diskSamplerForUpdate = diskSampler;
+    const networkSamplerForUpdate = networkSampler;
+    const immediateSample: ResourceSample = {};
 
-    if (enabledMonitors.cpu) {
+    if (monitors.cpu) {
       const cpuResult = sampleCpuPercent(previousCpuSnapshot);
       previousCpuSnapshot = cpuResult.snapshot;
-      sample.cpuPercent = cpuResult.cpuPercent;
+      immediateSample.cpuPercent = cpuResult.cpuPercent;
     }
 
-    if (enabledMonitors.memory) {
+    if (monitors.memory) {
       const memoryResult = sampleMemory();
-      sample.memoryPercent = memoryResult.memoryPercent;
-      sample.memoryUsedBytes = memoryResult.memoryUsedBytes;
-      sample.memoryTotalBytes = memoryResult.memoryTotalBytes;
+      immediateSample.memoryPercent = memoryResult.memoryPercent;
+      immediateSample.memoryUsedBytes = memoryResult.memoryUsedBytes;
+      immediateSample.memoryTotalBytes = memoryResult.memoryTotalBytes;
     }
 
-    if (enabledMonitors.gpu && gpuSampler) {
-      sample.gpu = await gpuSampler.readSample();
-      latestGpuSample = sample.gpu;
+    if (hasSampleData(immediateSample) && generation === activeConfigurationGeneration) {
+      statusBarManager.update(immediateSample);
     }
 
-    if (enabledMonitors.disk && diskSampler) {
-      sample.disk = await diskSampler.readSample();
+    const asyncSamples: Array<Promise<ResourceSample>> = [];
+
+    if (monitors.gpu && gpuSamplerForUpdate) {
+      asyncSamples.push(
+        gpuSamplerForUpdate.readSample()
+          .then((gpu): ResourceSample => {
+            if (generation === activeConfigurationGeneration) {
+              latestGpuSample = gpu;
+            }
+
+            return { gpu };
+          })
+          .catch((): ResourceSample => ({ gpu: undefined })),
+      );
     }
 
-    if (enabledMonitors.network && networkSampler) {
-      sample.network = await networkSampler.readSample();
+    if (monitors.disk && diskSamplerForUpdate) {
+      asyncSamples.push(
+        diskSamplerForUpdate.readSample()
+          .then((disk): ResourceSample => ({ disk }))
+          .catch((): ResourceSample => ({ disk: undefined })),
+      );
     }
 
-    if (!statusBarManager) {
+    if (monitors.network && networkSamplerForUpdate) {
+      asyncSamples.push(
+        networkSamplerForUpdate.readSample()
+          .then((network): ResourceSample => ({ network }))
+          .catch((): ResourceSample => ({ network: undefined })),
+      );
+    }
+
+    if (asyncSamples.length === 0) {
       return;
     }
 
-    statusBarManager.update(sample);
+    const asyncSample = Object.assign({}, ...(await Promise.all(asyncSamples))) as ResourceSample;
+
+    if (!statusBarManager || generation !== activeConfigurationGeneration) {
+      return;
+    }
+
+    statusBarManager.update(asyncSample);
   } finally {
-    refreshInProgress = false;
+    if (refreshInProgressGeneration === generation) {
+      refreshInProgressGeneration = undefined;
+    }
   }
+}
+
+function hasSampleData(sample: ResourceSample): boolean {
+  return Object.keys(sample).length > 0;
 }
