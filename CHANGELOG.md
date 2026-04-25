@@ -20,6 +20,7 @@ All notable changes to the "Moba Status Bar" extension will be documented in thi
 ### Fixed
 
 - Fixed network rate rendering to use a stable-width status text so normal value changes do not resize the item.
+- Fixed `mobaStatusBar.alignment` so switching between left and right moves the status bar items immediately instead of waiting for a later refresh or requiring a reload.
 
 ## [1.2.7] - 2026-04-25
 

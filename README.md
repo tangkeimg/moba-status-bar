@@ -106,7 +106,7 @@ You can configure Moba Status Bar from VS Code settings.
 | `mobaStatusBar.networkEnabled` | `false` | Enable network monitoring. Disabled by default so the network item stays hidden unless you opt in. |
 | `mobaStatusBar.showNetworkUpload` | `false` | Show upload speed alongside download speed in the network item. |
 | `mobaStatusBar.refreshIntervalMs` | `1000` | Enabled monitor refresh interval in milliseconds. Values below `500` are clamped to `500`. |
-| `mobaStatusBar.alignment` | `right` | Place the status bar items on the `left` or `right` side of the VS Code status bar. |
+| `mobaStatusBar.alignment` | `right` | Place the status bar items on the `left` or `right` side of the VS Code status bar. Changes apply immediately without reloading VS Code. |
 | `mobaStatusBar.enabled` | `true` | Enable or disable the status bar monitor. |
 
 Example `settings.json`:
