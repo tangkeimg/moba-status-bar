@@ -25,7 +25,7 @@ export type GpuDeviceSample = {
 
 export type GpuDeviceCategory = 'integrated' | 'discrete' | 'unknown';
 
-export type GpuSummaryMode = 'auto' | 'discrete' | 'integrated' | 'all' | 'selected';
+export type GpuSummaryMode = 'auto' | 'discrete' | 'integrated' | 'selected';
 
 export type GpuDisplayConfig = {
   summaryMode: GpuSummaryMode;

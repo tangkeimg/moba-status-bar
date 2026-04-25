@@ -21,7 +21,7 @@ import {
 import type { CpuTrendGraphConfig, EnabledMonitors, GpuDeviceCategory, GpuDisplayConfig, GpuSummaryMode, WarningThresholds } from './types.js';
 import { clampPercent } from './utils.js';
 
-const GPU_SUMMARY_MODES: GpuSummaryMode[] = ['auto', 'discrete', 'integrated', 'all', 'selected'];
+const GPU_SUMMARY_MODES: GpuSummaryMode[] = ['auto', 'discrete', 'integrated', 'selected'];
 const GPU_CATEGORY_VALUES: GpuDeviceCategory[] = ['integrated', 'discrete', 'unknown'];
 const GPU_DISPLAY_CONFIG_STORAGE_KEY = 'gpuDisplayConfig';
 

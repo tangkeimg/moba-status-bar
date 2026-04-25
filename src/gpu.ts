@@ -708,8 +708,6 @@ function selectGpuSummary(
   const automaticSummary = selectDefaultGpuSummary(devices, groups);
 
   switch (displayConfig.summaryMode) {
-    case 'all':
-      return groups.all;
     case 'discrete':
       return groups.discrete ?? createUnavailableGpuSummary('discrete');
     case 'integrated':

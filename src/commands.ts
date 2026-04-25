@@ -196,20 +196,9 @@ function buildGpuConfigurationItems(displayConfig: GpuDisplayConfig): GpuConfigu
       isCurrent: displayConfig.summaryMode === 'integrated',
     },
     {
-      label: 'All GPUs',
-      description: displayConfig.summaryMode === 'all' ? 'Current' : undefined,
-      detail: 'Summarize every detected GPU together.',
-      action: 'set-mode',
-      mode: 'all',
-      isCurrent: displayConfig.summaryMode === 'all',
-    },
-    {
-      label: 'Choose Specific GPUs...',
-      description:
-        displayConfig.summaryMode === 'selected'
-          ? `Current: ${displayConfig.selectedDeviceMatchers.length} selected GPU${displayConfig.selectedDeviceMatchers.length === 1 ? '' : 's'}`
-          : undefined,
-      detail: 'Pick from currently detected GPUs. The extension stores exact device ids so you do not need to type names. If none of those GPUs are available, the summary shows Selected GPU unavailable.',
+      label: 'Choose GPUs...',
+      description: getSelectedGpuModeDescription(displayConfig),
+      detail: 'Pick one or more detected GPUs. Selecting all GPUs replaces the old all mode. If none of those GPUs are available, the summary shows Selected GPU unavailable.',
       action: 'select-devices',
       isCurrent: displayConfig.summaryMode === 'selected',
     },
@@ -259,7 +248,7 @@ async function configureSelectedGpuDevices(
     {
       canPickMany: true,
       title: 'Select GPUs for the Status Bar',
-      placeHolder: 'Choose one or more detected GPUs. Accepting an empty selection resets GPU summary mode to auto.',
+      placeHolder: 'Choose zero or more detected GPUs. Accepting an empty selection keeps Selected GPU mode with no matched devices.',
     },
   );
 
@@ -271,7 +260,7 @@ async function configureSelectedGpuDevices(
     await persistGpuDisplayConfig({
       ...displayConfig,
       selectedDeviceMatchers: [],
-      summaryMode: 'auto',
+      summaryMode: 'selected',
     }, onGpuDisplayConfigChanged);
     return;
   }
@@ -428,6 +417,14 @@ function formatGpuCategoryLabel(category: GpuDeviceCategory | undefined): string
     default:
       return 'Unknown';
   }
+}
+
+function getSelectedGpuModeDescription(displayConfig: GpuDisplayConfig): string | undefined {
+  if (displayConfig.summaryMode !== 'selected') {
+    return undefined;
+  }
+
+  return `Current: ${displayConfig.selectedDeviceMatchers.length} selected GPU${displayConfig.selectedDeviceMatchers.length === 1 ? '' : 's'}`;
 }
 
 async function persistGpuDisplayConfig(
