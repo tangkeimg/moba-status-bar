@@ -34,7 +34,7 @@ No setup required. Customize behavior later in Settings if needed.
 ## Features
 
 - **CPU usage with trend graph**: shows real-time CPU usage with a compact trend graph in the status bar.
-- **GPU usage in the status bar**: shows an automatic GPU summary that prefers discrete GPUs when present, keeps integrated and discrete memory separate, and includes VRAM usage when available. GPU telemetry uses lightweight platform-specific backends, and the tooltip groups all detected GPUs by type.
+- **GPU usage in the status bar**: shows an automatic GPU summary that prefers discrete GPUs when present, keeps integrated and discrete memory separate, and includes VRAM usage when available. GPU telemetry uses lightweight platform-specific backends, including Linux amdgpu sysfs support when vendor tools are unavailable, and the tooltip groups all detected GPUs by type.
 - **Memory usage in the status bar**: shows used memory and total memory, for example `8.4GB / 16.0GB`.
 - **Workspace disk usage**: shows usage for the disk that contains your first workspace folder. If no workspace is open, it uses your home directory.
 - **Network usage in the status bar**: shows live download speed in a compact fixed-width item when enabled. Upload speed is available as an optional setting and stays off by default to keep the status bar narrow.
@@ -62,7 +62,7 @@ GPU monitoring is best-effort and never blocks the rest of the status bar. If GP
 | Platform | Backend | Behavior |
 | --- | --- | --- |
 | Windows | PowerShell `Get-Counter` GPU Engine and GPU Adapter Memory counters, with registry metadata for names and VRAM totals | Shows per-GPU utilization and dedicated VRAM when counters are available. |
-| Linux | `nvidia-smi` for NVIDIA GPUs, or `rocm-smi` for AMD ROCm GPUs when installed | Shows utilization and VRAM from the available vendor tool. Missing tools, driver errors, command timeouts, or parse failures fall back to no GPU item. |
+| Linux | `nvidia-smi` for NVIDIA GPUs, `rocm-smi` for AMD ROCm GPUs when installed, or amdgpu sysfs telemetry when the kernel exposes `gpu_busy_percent` and VRAM counters | Shows utilization and VRAM from the available backend. Missing tools, missing sysfs counters, driver errors, command timeouts, or parse failures fall back to no GPU item. |
 | macOS | No lightweight built-in GPU telemetry backend | GPU monitoring falls back to hidden; the extension does not error or stop refreshing other monitors. |
 | Other platforms | None | GPU monitoring falls back to hidden. |
 
@@ -140,7 +140,7 @@ The GPU display mode, selected devices, and category overrides are stored intern
 - Disk usage is cached and refreshed less often than CPU and memory to keep the extension lightweight.
 - Network usage is sampled with a lightweight backend and an adaptive cache so it does not spawn a new probe on every status-bar refresh.
 - Network monitoring is opt-in and stays hidden until you enable `mobaStatusBar.networkEnabled`.
-- GPU monitoring uses the lightest available backend for the current platform. On unsupported systems or when runtime GPU telemetry is unavailable, the GPU item stays hidden.
+- GPU monitoring uses the lightest available backend for the current platform. On Linux, AMD systems can fall back to amdgpu sysfs telemetry when `rocm-smi` is unavailable. On unsupported systems or when runtime GPU telemetry is unavailable, the GPU item stays hidden.
 - Disabled monitors are not sampled in the refresh loop.
 - Process lists are collected only when you open them.
 - On Windows, process data is collected through PowerShell/CIM. On macOS and Linux, it is collected through `ps`.

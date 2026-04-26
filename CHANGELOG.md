@@ -4,6 +4,20 @@ All notable changes to the "Moba Status Bar" extension will be documented in thi
 
 <!-- markdownlint-disable MD024 -->
 
+## [1.3.1] - 2026-04-26
+
+### Added
+
+- Added a Linux amdgpu sysfs fallback backend so AMD integrated GPUs can surface utilization and VRAM data even when `rocm-smi` is not installed.
+
+### Changed
+
+- Documented the Linux amdgpu sysfs fallback path and support expectations in the README.
+
+### Fixed
+
+- Hardened Linux GPU backend detection so amdgpu sysfs telemetry only activates when real counters are available, reducing the chance of empty GPU items on unsupported AMD systems.
+
 ## [1.3.0] - 2026-04-25
 
 ### Added

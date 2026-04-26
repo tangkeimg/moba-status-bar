@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { readFile, readdir } from 'node:fs/promises';
 import * as os from 'node:os';
 import { promisify } from 'node:util';
 import type { GpuAggregateSample, GpuDeviceCategory, GpuDeviceSample, GpuDisplayConfig, GpuSummaryMode, GpuSummarySample } from './types.js';
@@ -11,8 +12,8 @@ const ACTIVE_GPU_UTILIZATION_THRESHOLD_PERCENT = 3;
 const ACTIVE_GPU_MEMORY_THRESHOLD_BYTES = 1024 ** 3;
 const ACTIVE_GPU_MEMORY_THRESHOLD_PERCENT = 10;
 
-type GpuBackend = 'windows-counters' | 'linux-nvidia-smi' | 'linux-rocm-smi' | 'none';
-type LinuxGpuBackend = Extract<GpuBackend, 'linux-nvidia-smi' | 'linux-rocm-smi'>;
+type GpuBackend = 'windows-counters' | 'linux-nvidia-smi' | 'linux-rocm-smi' | 'linux-amdgpu-sysfs' | 'none';
+type LinuxGpuBackend = Extract<GpuBackend, 'linux-nvidia-smi' | 'linux-rocm-smi' | 'linux-amdgpu-sysfs'>;
 
 type GpuCounterSampleRow = {
   InstanceName?: string;
@@ -28,6 +29,12 @@ type WindowsGpuMetadata = {
   name?: string;
   memoryTotalBytes?: number;
   isPhysical: boolean;
+};
+
+type LinuxSysfsGpuInfo = {
+  cardName: string;
+  cardPath: string;
+  devicePath: string;
 };
 
 export interface GpuSampler {
@@ -50,8 +57,9 @@ export function createGpuSampler(displayConfig: GpuDisplayConfig): GpuSampler {
       return cachedAvailability;
     }
 
-    const command = backend === 'linux-nvidia-smi' ? 'nvidia-smi' : 'rocm-smi';
-    const availabilityPromise = commandExists(command);
+    const availabilityPromise = backend === 'linux-amdgpu-sysfs'
+      ? hasAmdGpuSysfsSupport()
+      : commandExists(backend === 'linux-nvidia-smi' ? 'nvidia-smi' : 'rocm-smi');
     linuxBackendAvailability.set(backend, availabilityPromise);
     return availabilityPromise;
   }
@@ -66,13 +74,19 @@ export function createGpuSampler(displayConfig: GpuDisplayConfig): GpuSampler {
         nextMemoryRefreshAt = result.nextMemoryRefreshAt;
         return result.sample;
       }
+      case 'linux-amdgpu-sysfs':
+        return await readAmdGpuSysfsSample(displayConfig);
     }
   }
 
   async function readLinuxGpuSample(preferredBackend: LinuxGpuBackend): Promise<GpuAggregateSample | undefined> {
-    const fallbackBackend: LinuxGpuBackend = preferredBackend === 'linux-nvidia-smi' ? 'linux-rocm-smi' : 'linux-nvidia-smi';
+    const fallbackBackends = preferredBackend === 'linux-nvidia-smi'
+      ? ['linux-rocm-smi', 'linux-amdgpu-sysfs'] satisfies LinuxGpuBackend[]
+      : preferredBackend === 'linux-rocm-smi'
+        ? ['linux-amdgpu-sysfs', 'linux-nvidia-smi'] satisfies LinuxGpuBackend[]
+        : ['linux-rocm-smi', 'linux-nvidia-smi'] satisfies LinuxGpuBackend[];
 
-    for (const backend of [preferredBackend, fallbackBackend]) {
+    for (const backend of [preferredBackend, ...fallbackBackends]) {
       if (backend !== preferredBackend && !(await isLinuxBackendAvailable(backend))) {
         continue;
       }
@@ -120,6 +134,7 @@ export function createGpuSampler(displayConfig: GpuDisplayConfig): GpuSampler {
             return cachedSample;
           case 'linux-nvidia-smi':
           case 'linux-rocm-smi':
+          case 'linux-amdgpu-sysfs':
             cachedSample = await readLinuxGpuSample(backend) ?? cachedSample;
             return cachedSample;
           default:
@@ -151,6 +166,10 @@ async function detectGpuBackend(): Promise<GpuBackend> {
 
       if (await commandExists('rocm-smi')) {
         return 'linux-rocm-smi';
+      }
+
+      if (await hasAmdGpuSysfsSupport()) {
+        return 'linux-amdgpu-sysfs';
       }
 
       return 'none';
@@ -331,6 +350,163 @@ async function readRocmSmiGpuSample(
     memoryCache: nextMemoryCache,
     nextMemoryRefreshAt: shouldRefreshMemory ? Date.now() + GPU_MEMORY_REFRESH_MS : nextMemoryRefreshAt,
   };
+}
+
+async function hasAmdGpuSysfsSupport(): Promise<boolean> {
+  try {
+    const cards = await listAmdGpuSysfsCards();
+
+    for (const card of cards) {
+      if (await hasAmdGpuSysfsTelemetry(card.devicePath)) {
+        return true;
+      }
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+async function readAmdGpuSysfsSample(displayConfig: GpuDisplayConfig): Promise<GpuAggregateSample | undefined> {
+  const cards = await listAmdGpuSysfsCards();
+  const devices = await Promise.all(cards.map(readAmdGpuSysfsDevice));
+  return createAggregateGpuSample(devices.filter((device): device is GpuDeviceSample => device !== undefined), displayConfig);
+}
+
+async function listAmdGpuSysfsCards(): Promise<LinuxSysfsGpuInfo[]> {
+  const entries = await readdir('/sys/class/drm', { withFileTypes: true });
+  const cards = entries
+    .filter((entry) => entry.isSymbolicLink() && /^card\d+$/.test(entry.name))
+    .map((entry) => ({
+      cardName: entry.name,
+      cardPath: `/sys/class/drm/${entry.name}`,
+      devicePath: `/sys/class/drm/${entry.name}/device`,
+    }));
+  const cardsWithDrivers = await Promise.all(cards.map(async (card) => {
+    const driver = await readSysfsTextFile(`${card.devicePath}/uevent`);
+
+    if (!driver.includes('DRIVER=amdgpu')) {
+      return undefined;
+    }
+
+    return card;
+  }));
+
+  return cardsWithDrivers.filter((card): card is LinuxSysfsGpuInfo => card !== undefined);
+}
+
+async function readAmdGpuSysfsDevice(card: LinuxSysfsGpuInfo): Promise<GpuDeviceSample | undefined> {
+  const indexMatch = card.cardName.match(/\d+/);
+  const index = indexMatch ? Number(indexMatch[0]) : 0;
+  const [vendorId, deviceId, utilizationPercent, memoryUsedBytes, memoryTotalBytes, slotName, productName] = await Promise.all([
+    readSysfsTextFile(`${card.devicePath}/vendor`),
+    readSysfsTextFile(`${card.devicePath}/device`),
+    readSysfsNumberFile(`${card.devicePath}/gpu_busy_percent`),
+    readSysfsNumberFile(`${card.devicePath}/mem_info_vram_used`),
+    readSysfsNumberFile(`${card.devicePath}/mem_info_vram_total`),
+    readSysfsUeventField(`${card.devicePath}/uevent`, 'PCI_SLOT_NAME'),
+    readFirstSysfsTextFile([
+      `${card.devicePath}/product_name`,
+      `${card.devicePath}/product_number`,
+    ]),
+  ]);
+
+  const normalizedVendorId = vendorId.toLowerCase();
+
+  if (normalizedVendorId && normalizedVendorId !== '0x1002') {
+    return undefined;
+  }
+
+  const resolvedName = createAmdSysfsGpuName(productName, deviceId, slotName);
+  const resolvedMemoryTotalBytes = memoryTotalBytes !== undefined && memoryTotalBytes > 0 ? memoryTotalBytes : undefined;
+
+  if (utilizationPercent === undefined && memoryUsedBytes === undefined) {
+    return undefined;
+  }
+
+  return {
+    id: `amdgpu-${slotName || card.cardName}`,
+    index,
+    name: resolvedName,
+    category: isAmdIntegratedGpu(resolvedName.toLowerCase(), resolvedMemoryTotalBytes) ? 'integrated' : 'discrete',
+    utilizationPercent,
+    memoryUsedBytes,
+    memoryTotalBytes: resolvedMemoryTotalBytes,
+    memoryPercent:
+      memoryUsedBytes !== undefined && resolvedMemoryTotalBytes !== undefined
+        ? calculateMemoryPercent(memoryUsedBytes, resolvedMemoryTotalBytes)
+        : undefined,
+  };
+}
+
+function createAmdSysfsGpuName(productName: string, deviceId: string, slotName: string): string {
+  const normalizedProductName = productName.trim();
+
+  if (normalizedProductName) {
+    return normalizedProductName;
+  }
+
+  if (deviceId) {
+    return `AMD Radeon Graphics (${deviceId.replace(/^0x/i, '')}${slotName ? ` @ ${slotName}` : ''})`;
+  }
+
+  return slotName ? `AMD Radeon Graphics @ ${slotName}` : 'AMD Radeon Graphics';
+}
+
+async function hasAmdGpuSysfsTelemetry(devicePath: string): Promise<boolean> {
+  const [utilizationValue, memoryUsedValue] = await Promise.all([
+    readSysfsTextFile(`${devicePath}/gpu_busy_percent`),
+    readSysfsTextFile(`${devicePath}/mem_info_vram_used`),
+  ]);
+
+  return Boolean(utilizationValue || memoryUsedValue);
+}
+
+async function readFirstSysfsTextFile(paths: string[]): Promise<string> {
+  for (const path of paths) {
+    const value = await readSysfsTextFile(path);
+
+    if (value) {
+      return value;
+    }
+  }
+
+  return '';
+}
+
+async function readSysfsUeventField(path: string, key: string): Promise<string> {
+  const contents = await readSysfsTextFile(path);
+
+  if (!contents) {
+    return '';
+  }
+
+  const prefix = `${key}=`;
+  const line = contents
+    .split(/\r?\n/)
+    .find((entry) => entry.startsWith(prefix));
+
+  return line ? line.slice(prefix.length).trim() : '';
+}
+
+async function readSysfsTextFile(path: string): Promise<string> {
+  try {
+    return (await readFile(path, 'utf8')).trim();
+  } catch {
+    return '';
+  }
+}
+
+async function readSysfsNumberFile(path: string): Promise<number | undefined> {
+  const value = await readSysfsTextFile(path);
+
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 function extractWindowsGpuDeviceId(instanceName: string): string | undefined {
