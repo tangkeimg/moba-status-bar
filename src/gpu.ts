@@ -7,6 +7,7 @@ import { calculateMemoryPercent, clampPercent } from './utils.js';
 
 const execFileAsync = promisify(execFile);
 const GPU_COMMAND_TIMEOUT_MS = 5000;
+const WINDOWS_GPU_COMMAND_TIMEOUT_MS = 10000;
 const GPU_MEMORY_REFRESH_MS = 5000;
 const ACTIVE_GPU_UTILIZATION_THRESHOLD_PERCENT = 3;
 const ACTIVE_GPU_MEMORY_THRESHOLD_BYTES = 1024 ** 3;
@@ -519,24 +520,31 @@ async function readWindowsCounterSnapshot(): Promise<{
   memoryRows: GpuCounterSampleRow[];
 }> {
   const script = [
-    "$util = (Get-Counter '\\GPU Engine(*)\\Utilization Percentage').CounterSamples | ForEach-Object {",
-    '  [PSCustomObject]@{',
-    '    InstanceName = $_.InstanceName',
-    '    CookedValue = [double]$_.CookedValue',
+    'function Convert-GpuCounterSamples {',
+    '  param($samples)',
+    '  $samples | ForEach-Object {',
+    '    $instanceName = [string]$_.InstanceName',
+    "    if ($instanceName -match '(luid_[^_]+_[^_]+_phys_\\d+)') {",
+    '      [PSCustomObject]@{',
+    '        DeviceId = $Matches[1]',
+    '        CookedValue = [double]$_.CookedValue',
+    '      }',
+    '    }',
+    '  } | Group-Object DeviceId | ForEach-Object {',
+    '    [PSCustomObject]@{',
+    '      InstanceName = $_.Name',
+    '      CookedValue = [double](($_.Group | Measure-Object -Property CookedValue -Maximum).Maximum)',
+    '    }',
     '  }',
     '}',
-    "$memory = (Get-Counter '\\GPU Adapter Memory(*)\\Dedicated Usage').CounterSamples | ForEach-Object {",
-    '  [PSCustomObject]@{',
-    '    InstanceName = $_.InstanceName',
-    '    CookedValue = [double]$_.CookedValue',
-    '  }',
-    '}',
+    "$util = Convert-GpuCounterSamples ((Get-Counter '\\GPU Engine(*)\\Utilization Percentage').CounterSamples)",
+    "$memory = Convert-GpuCounterSamples ((Get-Counter '\\GPU Adapter Memory(*)\\Dedicated Usage').CounterSamples)",
     '[PSCustomObject]@{ Utilization = $util; Memory = $memory } | ConvertTo-Json -Compress -Depth 4',
   ].join('\n');
   const { stdout } = await execFileAsync(
     'powershell.exe',
     ['-NoProfile', '-NonInteractive', '-Command', script],
-    { timeout: GPU_COMMAND_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
+    { timeout: WINDOWS_GPU_COMMAND_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
   );
   const raw = stdout.trim();
 
