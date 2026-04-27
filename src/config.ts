@@ -17,11 +17,11 @@ import {
   DEFAULT_REFRESH_INTERVAL_MS,
   DEFAULT_ALIGNMENT,
   DEFAULT_GPU_SUMMARY_MODE,
+  MAX_WARNING_THRESHOLD_PERCENT,
   MIN_CPU_TREND_GRAPH_LENGTH,
   MIN_REFRESH_INTERVAL_MS,
 } from './constants.js';
 import type { CpuTrendGraphConfig, EnabledMonitors, GpuDeviceCategory, GpuDisplayConfig, GpuSummaryMode, WarningThresholds } from './types.js';
-import { clampPercent } from './utils.js';
 
 const GPU_SUMMARY_MODES: GpuSummaryMode[] = ['auto', 'discrete', 'integrated', 'selected'];
 const GPU_CATEGORY_VALUES: GpuDeviceCategory[] = ['integrated', 'discrete', 'unknown'];
@@ -43,11 +43,15 @@ export function readWarningThresholds(): WarningThresholds {
   const diskPercent = config.get<number>('diskWarningThresholdPercent', DEFAULT_DISK_WARNING_THRESHOLD_PERCENT);
 
   return {
-    cpuPercent: clampPercent(cpuPercent),
-    memoryPercent: clampPercent(memoryPercent),
-    gpuPercent: clampPercent(gpuPercent),
-    diskPercent: clampPercent(diskPercent),
+    cpuPercent: clampWarningThresholdPercent(cpuPercent),
+    memoryPercent: clampWarningThresholdPercent(memoryPercent),
+    gpuPercent: clampWarningThresholdPercent(gpuPercent),
+    diskPercent: clampWarningThresholdPercent(diskPercent),
   };
+}
+
+function clampWarningThresholdPercent(value: number): number {
+  return Math.min(MAX_WARNING_THRESHOLD_PERCENT, Math.max(0, value));
 }
 
 export function readRefreshIntervalMs(): number {

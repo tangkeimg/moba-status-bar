@@ -1,5 +1,5 @@
 import * as os from 'node:os';
-import { FIGURE_SPACE } from './constants.js';
+import { FIGURE_SPACE, MAX_WARNING_THRESHOLD_PERCENT } from './constants.js';
 import type { CpuSnapshot, CpuProcess, DiskSample } from './types.js';
 
 const CPU_TREND_BLOCKS = [
@@ -46,6 +46,11 @@ export function calculateMemoryPercent(usedBytes: number, totalBytes: number): n
 
 export function formatPercent(value: number): string {
   return `${Math.round(clampPercent(value)).toString().padStart(2, FIGURE_SPACE)}%`;
+}
+
+export function formatWarningThresholdPercent(value: number): string {
+  const normalizedValue = Math.min(MAX_WARNING_THRESHOLD_PERCENT, Math.max(0, value));
+  return `${Math.round(normalizedValue).toString().padStart(2, FIGURE_SPACE)}%`;
 }
 
 export function formatPrecisePercent(value: number): string {

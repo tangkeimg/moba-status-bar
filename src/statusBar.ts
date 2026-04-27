@@ -20,6 +20,7 @@ import type { ResourceSample, DiskSample, EnabledMonitors, GpuAggregateSample, G
 import {
   formatPercent,
   formatPrecisePercent,
+  formatWarningThresholdPercent,
   formatStatusBarPrecisePercent,
   formatStorageUsage,
   formatCompactStorageUsage,
@@ -327,7 +328,7 @@ export function createStatusBarManager(): StatusBarManager {
       cpuStatusBarItem.tooltip = new vscode.MarkdownString([
         '**CPU**',
         '',
-        `Warning threshold: ${formatPercent(thresholds.cpuPercent)}`,
+        `Warning threshold: ${formatWarningThresholdPercent(thresholds.cpuPercent)}`,
       ].join('\n\n'));
     },
 
@@ -341,7 +342,7 @@ export function createStatusBarManager(): StatusBarManager {
           '**Memory**',
           '',
           `Usage: ${formatPercent(calculateMemoryPercent(memoryUsedBytes, memoryTotalBytes))}`,
-          `Warning threshold: ${formatPercent(thresholds.memoryPercent)}`,
+          `Warning threshold: ${formatWarningThresholdPercent(thresholds.memoryPercent)}`,
         ].join('\n\n'),
       );
     },
@@ -355,7 +356,7 @@ export function createStatusBarManager(): StatusBarManager {
       if (!activeGpu) {
         lines.push('No GPU telemetry available.');
         lines.push('');
-        lines.push(`Warning threshold: ${formatPercent(thresholds.gpuPercent)}`);
+        lines.push(`Warning threshold: ${formatWarningThresholdPercent(thresholds.gpuPercent)}`);
         updateGpuTooltipText(lines.join('\n\n'));
         return;
       }
@@ -366,7 +367,7 @@ export function createStatusBarManager(): StatusBarManager {
       appendGpuTooltipSection(lines, 'Unknown GPUs', activeGpu.devices.filter((device) => device.category === 'unknown'));
 
       lines.push('Click the GPU status item to choose which detected GPUs are summarized or to override a category.');
-      lines.push(`Warning threshold: ${formatPercent(thresholds.gpuPercent)}`);
+      lines.push(`Warning threshold: ${formatWarningThresholdPercent(thresholds.gpuPercent)}`);
       updateGpuTooltipText(lines.join('\n\n'));
     },
 
@@ -378,7 +379,7 @@ export function createStatusBarManager(): StatusBarManager {
           '',
           `Disk target: ${diskTargetPath}`,
           disk ? `Usage: ${formatStorageUsage(disk.diskUsedBytes, disk.diskTotalBytes)}` : 'Usage: --',
-          `Warning threshold: ${formatPercent(thresholds.diskPercent)}`,
+          `Warning threshold: ${formatWarningThresholdPercent(thresholds.diskPercent)}`,
         ].join('\n\n'),
       );
     },
