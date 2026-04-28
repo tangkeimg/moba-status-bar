@@ -108,6 +108,7 @@ async function readWindowsCounterSnapshot(): Promise<NetworkCounterSnapshot> {
     'powershell.exe',
     [
       '-NoProfile',
+      '-NonInteractive',
       '-Command',
       [
         'Get-NetAdapterStatistics',

@@ -21,6 +21,9 @@ let refreshTimer: NodeJS.Timeout | undefined;
 let previousCpuSnapshot: CpuSnapshot | undefined;
 let activeConfigurationGeneration = 0;
 let refreshInProgressGeneration: number | undefined;
+let gpuRefreshInProgressGeneration: number | undefined;
+let diskRefreshInProgressGeneration: number | undefined;
+let networkRefreshInProgressGeneration: number | undefined;
 let statusBarManager: StatusBarManager | undefined;
 let gpuSampler: GpuSampler | undefined;
 let diskSampler: DiskSampler | undefined;
@@ -78,6 +81,7 @@ export function activate(context: vscode.ExtensionContext): void {
 export function deactivate(): void {
   activeConfigurationGeneration += 1;
   refreshInProgressGeneration = undefined;
+  resetAsyncRefreshState();
   stopRefreshing();
   statusBarManager?.dispose();
   statusBarManager = undefined;
@@ -90,6 +94,7 @@ export function deactivate(): void {
 function applyConfiguration(): void {
   activeConfigurationGeneration += 1;
   refreshInProgressGeneration = undefined;
+  resetAsyncRefreshState();
   stopRefreshing();
 
   if (!isExtensionEnabled()) {
@@ -184,49 +189,41 @@ async function updateStatusBar(): Promise<void> {
       statusBarManager.update(immediateSample);
     }
 
-    const asyncSamples: Array<Promise<ResourceSample>> = [];
-
     if (monitors.gpu && gpuSamplerForUpdate) {
-      asyncSamples.push(
-        gpuSamplerForUpdate.readSample()
+      startAsyncResourceSample(
+        'gpu',
+        generation,
+        () => gpuSamplerForUpdate.readSample()
           .then((gpu): ResourceSample => {
             if (generation === activeConfigurationGeneration) {
               latestGpuSample = gpu;
             }
 
             return { gpu };
-          })
-          .catch((): ResourceSample => ({ gpu: undefined })),
+          }),
+        { gpu: undefined },
       );
     }
 
     if (monitors.disk && diskSamplerForUpdate) {
-      asyncSamples.push(
-        diskSamplerForUpdate.readSample()
-          .then((disk): ResourceSample => ({ disk }))
-          .catch((): ResourceSample => ({ disk: undefined })),
+      startAsyncResourceSample(
+        'disk',
+        generation,
+        () => diskSamplerForUpdate.readSample()
+          .then((disk): ResourceSample => ({ disk })),
+        { disk: undefined },
       );
     }
 
     if (monitors.network && networkSamplerForUpdate) {
-      asyncSamples.push(
-        networkSamplerForUpdate.readSample()
-          .then((network): ResourceSample => ({ network }))
-          .catch((): ResourceSample => ({ network: undefined })),
+      startAsyncResourceSample(
+        'network',
+        generation,
+        () => networkSamplerForUpdate.readSample()
+          .then((network): ResourceSample => ({ network })),
+        { network: undefined },
       );
     }
-
-    if (asyncSamples.length === 0) {
-      return;
-    }
-
-    const asyncSample = Object.assign({}, ...(await Promise.all(asyncSamples))) as ResourceSample;
-
-    if (!statusBarManager || generation !== activeConfigurationGeneration) {
-      return;
-    }
-
-    statusBarManager.update(asyncSample);
   } finally {
     if (refreshInProgressGeneration === generation) {
       refreshInProgressGeneration = undefined;
@@ -236,4 +233,66 @@ async function updateStatusBar(): Promise<void> {
 
 function hasSampleData(sample: ResourceSample): boolean {
   return Object.keys(sample).length > 0;
+}
+
+type AsyncResourceMonitor = 'gpu' | 'disk' | 'network';
+
+function resetAsyncRefreshState(): void {
+  gpuRefreshInProgressGeneration = undefined;
+  diskRefreshInProgressGeneration = undefined;
+  networkRefreshInProgressGeneration = undefined;
+}
+
+function startAsyncResourceSample(
+  monitor: AsyncResourceMonitor,
+  generation: number,
+  readSample: () => Promise<ResourceSample>,
+  fallbackSample: ResourceSample,
+): void {
+  if (getAsyncRefreshInProgressGeneration(monitor) === generation) {
+    return;
+  }
+
+  setAsyncRefreshInProgressGeneration(monitor, generation);
+
+  void Promise.resolve()
+    .then(readSample)
+    .catch(() => fallbackSample)
+    .then((sample) => {
+      if (!statusBarManager || generation !== activeConfigurationGeneration) {
+        return;
+      }
+
+      statusBarManager.update(sample);
+    })
+    .finally(() => {
+      if (getAsyncRefreshInProgressGeneration(monitor) === generation) {
+        setAsyncRefreshInProgressGeneration(monitor, undefined);
+      }
+    });
+}
+
+function getAsyncRefreshInProgressGeneration(monitor: AsyncResourceMonitor): number | undefined {
+  switch (monitor) {
+    case 'gpu':
+      return gpuRefreshInProgressGeneration;
+    case 'disk':
+      return diskRefreshInProgressGeneration;
+    case 'network':
+      return networkRefreshInProgressGeneration;
+  }
+}
+
+function setAsyncRefreshInProgressGeneration(monitor: AsyncResourceMonitor, generation: number | undefined): void {
+  switch (monitor) {
+    case 'gpu':
+      gpuRefreshInProgressGeneration = generation;
+      return;
+    case 'disk':
+      diskRefreshInProgressGeneration = generation;
+      return;
+    case 'network':
+      networkRefreshInProgressGeneration = generation;
+      return;
+  }
 }

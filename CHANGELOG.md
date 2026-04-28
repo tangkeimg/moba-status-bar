@@ -4,6 +4,12 @@ All notable changes to the "Moba Status Bar" extension will be documented in thi
 
 <!-- markdownlint-disable MD024 -->
 
+## [1.3.3] - 2026-04-28
+
+### Fixed
+
+- Fixed network status display being delayed by slower GPU or disk telemetry collection.
+
 ## [1.3.2] - 2026-04-27
 
 ### Fixed
@@ -39,4 +45,3 @@ All notable changes to the "Moba Status Bar" extension will be documented in thi
 - Documented network monitoring support, settings, and platform behavior in the README.
 - Kept the network item focused on a tooltip-free compact display so it uses less status bar space by default.
 - Changed network monitoring to stay hidden by default unless `mobaStatusBar.networkEnabled` is turned on.
-
