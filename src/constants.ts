@@ -18,6 +18,7 @@ export const DEFAULT_GPU_WARNING_THRESHOLD_PERCENT = 90;
 export const DEFAULT_DISK_WARNING_THRESHOLD_PERCENT = 85;
 export const MAX_WARNING_THRESHOLD_PERCENT = 101;
 export const DEFAULT_GPU_SUMMARY_MODE = 'auto';
+export const DEFAULT_WINDOWS_GPU_BACKEND = 'typeperf';
 export const FIGURE_SPACE = '\u2007';
 export const SHOW_CPU_PROCESSES_COMMAND = 'mobaStatusBar.showCpuProcesses';
 export const SHOW_MEMORY_PROCESSES_COMMAND = 'mobaStatusBar.showMemoryProcesses';

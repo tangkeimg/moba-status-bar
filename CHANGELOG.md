@@ -4,6 +4,18 @@ All notable changes to the "Moba Status Bar" extension will be documented in thi
 
 <!-- markdownlint-disable MD024 -->
 
+## [1.3.4] - 2026-04-28
+
+### Added
+
+- Added `mobaStatusBar.windowsGpuBackend` so Windows users can choose between the default `typeperf` GPU sampler and the higher-cost PowerShell sampler.
+
+### Changed
+
+- Changed Windows GPU monitoring to use `typeperf.exe` by default to avoid recurring PowerShell CPU spikes.
+- Kept PowerShell `Get-Counter` GPU sampling available as an explicit opt-in backend for systems where Typeperf is unavailable.
+- Documented the Windows GPU backend behavior and the tradeoff between Typeperf and PowerShell sampling.
+
 ## [1.3.3] - 2026-04-28
 
 ### Fixed

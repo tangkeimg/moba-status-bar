@@ -23,7 +23,7 @@
     "network",
     "monitor"
   ],
-  "version": "1.3.3",
+  "version": "1.3.4",
   "publisher": "tangkeimg",
   "license": "MIT",
   "icon": "output.png",
@@ -108,18 +108,32 @@
           "order": 6,
           "description": "Enable GPU monitoring. When disabled, GPU sampling is not collected."
         },
+        "mobaStatusBar.windowsGpuBackend": {
+          "type": "string",
+          "default": "typeperf",
+          "enum": [
+            "typeperf",
+            "powershell"
+          ],
+          "enumDescriptions": [
+            "Use Windows typeperf.exe. This is the default and avoids PowerShell CPU spikes. If typeperf.exe is unavailable, the GPU status item stays hidden.",
+            "Use PowerShell Get-Counter. This can show GPU data on systems without typeperf.exe, but may create noticeable CPU spikes while sampling."
+          ],
+          "order": 7,
+          "description": "Windows GPU sampling backend. If the GPU item does not appear with the default Typeperf backend, typeperf.exe may be unavailable; choose PowerShell only if you accept its higher CPU cost."
+        },
         "mobaStatusBar.gpuWarningThresholdPercent": {
           "type": "number",
           "default": 90,
           "minimum": 0,
           "maximum": 101,
-          "order": 7,
+          "order": 8,
           "description": "Show a warning background when GPU usage is at or above this percentage."
         },
         "mobaStatusBar.diskEnabled": {
           "type": "boolean",
           "default": true,
-          "order": 8,
+          "order": 9,
           "description": "Enable disk monitoring. When disabled, disk usage is not sampled."
         },
         "mobaStatusBar.diskWarningThresholdPercent": {
@@ -127,26 +141,26 @@
           "default": 85,
           "minimum": 0,
           "maximum": 101,
-          "order": 9,
+          "order": 10,
           "description": "Show a warning background when disk usage is at or above this percentage."
         },
         "mobaStatusBar.networkEnabled": {
           "type": "boolean",
           "default": false,
-          "order": 10,
+          "order": 11,
           "description": "Enable network monitoring. Disabled by default so the network item stays hidden unless you opt in."
         },
         "mobaStatusBar.showNetworkUpload": {
           "type": "boolean",
           "default": false,
-          "order": 11,
+          "order": 12,
           "description": "Show upload speed alongside download speed in the network status bar item."
         },
         "mobaStatusBar.refreshIntervalMs": {
           "type": "number",
           "default": 1000,
           "minimum": 500,
-          "order": 12,
+          "order": 13,
           "description": "How often enabled live monitors should refresh, in milliseconds."
         },
         "mobaStatusBar.alignment": {
@@ -156,13 +170,13 @@
             "left",
             "right"
           ],
-          "order": 13,
+          "order": 14,
           "description": "Alignment of the Moba Status Bar in the status bar."
         },
         "mobaStatusBar.enabled": {
           "type": "boolean",
           "default": true,
-          "order": 14,
+          "order": 15,
           "description": "Enable the Moba Status Bar resource monitor."
         }
       }

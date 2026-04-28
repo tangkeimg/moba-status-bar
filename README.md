@@ -61,7 +61,7 @@ GPU monitoring is best-effort and never blocks the rest of the status bar. If GP
 
 | Platform | Backend | Behavior |
 | --- | --- | --- |
-| Windows | PowerShell `Get-Counter` GPU Engine and GPU Adapter Memory counters, with registry metadata for names and VRAM totals | Shows per-GPU utilization and dedicated VRAM when counters are available. |
+| Windows | `typeperf.exe` GPU Engine and GPU Adapter Memory counters by default, optional PowerShell `Get-Counter`, and registry metadata for names and VRAM totals | Shows per-GPU utilization and dedicated VRAM when counters are available. If the default Typeperf backend cannot run, the GPU item stays hidden; choose the PowerShell backend only if you accept its higher CPU cost. |
 | Linux | `nvidia-smi` for NVIDIA GPUs, `rocm-smi` for AMD ROCm GPUs when installed, or amdgpu sysfs telemetry when the kernel exposes `gpu_busy_percent` and VRAM counters | Shows utilization and VRAM from the available backend. Missing tools, missing sysfs counters, driver errors, command timeouts, or parse failures fall back to no GPU item. |
 | macOS | No lightweight built-in GPU telemetry backend | GPU monitoring falls back to hidden; the extension does not error or stop refreshing other monitors. |
 | Other platforms | None | GPU monitoring falls back to hidden. |
@@ -100,6 +100,7 @@ You can configure Moba Status Bar from VS Code settings.
 | `mobaStatusBar.memoryEnabled` | `true` | Enable memory monitoring. When disabled, memory usage is not sampled. |
 | `mobaStatusBar.memoryWarningThresholdPercent` | `90` | Highlight the memory item when memory usage is at or above this percentage. |
 | `mobaStatusBar.gpuEnabled` | `true` | Enable GPU monitoring. When disabled, GPU sampling is not collected. |
+| `mobaStatusBar.windowsGpuBackend` | `typeperf` | Windows GPU sampling backend. `typeperf` avoids PowerShell CPU spikes but requires `typeperf.exe`; `powershell` can be used as an opt-in fallback with higher sampling cost. |
 | `mobaStatusBar.gpuWarningThresholdPercent` | `90` | Highlight the GPU item when GPU usage is at or above this percentage. |
 | `mobaStatusBar.diskEnabled` | `true` | Enable disk monitoring. When disabled, disk usage is not sampled. |
 | `mobaStatusBar.diskWarningThresholdPercent` | `85` | Highlight the disk item when disk usage is at or above this percentage. |
@@ -120,6 +121,7 @@ Example `settings.json`:
   "mobaStatusBar.memoryEnabled": true,
   "mobaStatusBar.memoryWarningThresholdPercent": 90,
   "mobaStatusBar.gpuEnabled": true,
+  "mobaStatusBar.windowsGpuBackend": "typeperf",
   "mobaStatusBar.gpuWarningThresholdPercent": 90,
   "mobaStatusBar.diskEnabled": true,
   "mobaStatusBar.diskWarningThresholdPercent": 80,
@@ -140,7 +142,7 @@ The GPU display mode, selected devices, and category overrides are stored intern
 - Disk usage is cached and refreshed less often than CPU and memory to keep the extension lightweight.
 - Network usage is sampled with a lightweight backend and an adaptive cache so it does not spawn a new probe on every status-bar refresh.
 - Network monitoring is opt-in and stays hidden until you enable `mobaStatusBar.networkEnabled`.
-- GPU monitoring uses the lightest available backend for the current platform. On Linux, AMD systems can fall back to amdgpu sysfs telemetry when `rocm-smi` is unavailable. On unsupported systems or when runtime GPU telemetry is unavailable, the GPU item stays hidden.
+- GPU monitoring uses the lightest available backend for the current platform. On Windows, the default backend is `typeperf`; switch `mobaStatusBar.windowsGpuBackend` to `powershell` only when Typeperf is unavailable and you accept the higher sampling cost. On Linux, AMD systems can fall back to amdgpu sysfs telemetry when `rocm-smi` is unavailable. On unsupported systems or when runtime GPU telemetry is unavailable, the GPU item stays hidden.
 - Disabled monitors are not sampled in the refresh loop.
 - Process lists are collected only when you open them.
 - On Windows, process data is collected through PowerShell/CIM. On macOS and Linux, it is collected through `ps`.

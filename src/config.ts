@@ -17,14 +17,16 @@ import {
   DEFAULT_REFRESH_INTERVAL_MS,
   DEFAULT_ALIGNMENT,
   DEFAULT_GPU_SUMMARY_MODE,
+  DEFAULT_WINDOWS_GPU_BACKEND,
   MAX_WARNING_THRESHOLD_PERCENT,
   MIN_CPU_TREND_GRAPH_LENGTH,
   MIN_REFRESH_INTERVAL_MS,
 } from './constants.js';
-import type { CpuTrendGraphConfig, EnabledMonitors, GpuDeviceCategory, GpuDisplayConfig, GpuSummaryMode, WarningThresholds } from './types.js';
+import type { CpuTrendGraphConfig, EnabledMonitors, GpuDeviceCategory, GpuDisplayConfig, GpuSummaryMode, WarningThresholds, WindowsGpuBackend } from './types.js';
 
 const GPU_SUMMARY_MODES: GpuSummaryMode[] = ['auto', 'discrete', 'integrated', 'selected'];
 const GPU_CATEGORY_VALUES: GpuDeviceCategory[] = ['integrated', 'discrete', 'unknown'];
+const WINDOWS_GPU_BACKENDS: WindowsGpuBackend[] = ['typeperf', 'powershell'];
 const GPU_DISPLAY_CONFIG_STORAGE_KEY = 'gpuDisplayConfig';
 
 let gpuDisplayConfigStorage: vscode.Memento | undefined;
@@ -92,6 +94,13 @@ export function readEnabledMonitors(): EnabledMonitors {
     disk: config.get<boolean>('diskEnabled', DEFAULT_DISK_MONITOR_ENABLED),
     network: config.get<boolean>('networkEnabled', DEFAULT_NETWORK_MONITOR_ENABLED),
   };
+}
+
+export function readWindowsGpuBackend(): WindowsGpuBackend {
+  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+  const backend = config.get<WindowsGpuBackend>('windowsGpuBackend', DEFAULT_WINDOWS_GPU_BACKEND);
+
+  return WINDOWS_GPU_BACKENDS.find((item) => item === backend) ?? DEFAULT_WINDOWS_GPU_BACKEND;
 }
 
 export function isExtensionEnabled(): boolean {

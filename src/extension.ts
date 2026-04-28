@@ -1,7 +1,7 @@
 import * as os from 'node:os';
 import * as vscode from 'vscode';
 import { CONFIG_SECTION, CONFIGURE_GPU_DISPLAY_COMMAND, SHOW_CPU_PROCESSES_COMMAND, SHOW_MEMORY_PROCESSES_COMMAND } from './constants.js';
-import { initializeGpuDisplayConfigStorage, isExtensionEnabled, readEnabledMonitors, readGpuDisplayConfig, readRefreshIntervalMs } from './config.js';
+import { initializeGpuDisplayConfigStorage, isExtensionEnabled, readEnabledMonitors, readGpuDisplayConfig, readRefreshIntervalMs, readWindowsGpuBackend } from './config.js';
 import { sampleCpuPercent } from './cpu.js';
 import { sampleMemory } from './memory.js';
 import { createGpuSampler } from './gpu.js';
@@ -108,7 +108,9 @@ function applyConfiguration(): void {
   statusBarManager?.setEnabledMonitors(enabledMonitors);
 
   previousCpuSnapshot = enabledMonitors.cpu ? readCpuSnapshot() : undefined;
-  gpuSampler = enabledMonitors.gpu ? createGpuSampler(readGpuDisplayConfig()) : undefined;
+  gpuSampler = enabledMonitors.gpu
+    ? createGpuSampler(readGpuDisplayConfig(), { windowsBackend: readWindowsGpuBackend() })
+    : undefined;
   latestGpuSample = undefined;
   diskSampler = undefined;
   networkSampler = enabledMonitors.network ? createNetworkSampler() : undefined;

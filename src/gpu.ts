@@ -2,12 +2,13 @@ import { execFile } from 'node:child_process';
 import { readFile, readdir } from 'node:fs/promises';
 import * as os from 'node:os';
 import { promisify } from 'node:util';
-import type { GpuAggregateSample, GpuDeviceCategory, GpuDeviceSample, GpuDisplayConfig, GpuSummaryMode, GpuSummarySample } from './types.js';
+import type { GpuAggregateSample, GpuDeviceCategory, GpuDeviceSample, GpuDisplayConfig, GpuSummaryMode, GpuSummarySample, WindowsGpuBackend } from './types.js';
 import { calculateMemoryPercent, clampPercent } from './utils.js';
 
 const execFileAsync = promisify(execFile);
 const GPU_COMMAND_TIMEOUT_MS = 5000;
 const WINDOWS_GPU_COMMAND_TIMEOUT_MS = 10000;
+const WINDOWS_GPU_COUNTER_MAX_BUFFER_BYTES = 4 * 1024 * 1024;
 const GPU_MEMORY_REFRESH_MS = 5000;
 const ACTIVE_GPU_UTILIZATION_THRESHOLD_PERCENT = 3;
 const ACTIVE_GPU_MEMORY_THRESHOLD_BYTES = 1024 ** 3;
@@ -19,11 +20,6 @@ type LinuxGpuBackend = Extract<GpuBackend, 'linux-nvidia-smi' | 'linux-rocm-smi'
 type GpuCounterSampleRow = {
   InstanceName?: string;
   CookedValue?: number;
-};
-
-type GpuCounterSnapshot = {
-  Utilization?: GpuCounterSampleRow[] | GpuCounterSampleRow;
-  Memory?: GpuCounterSampleRow[] | GpuCounterSampleRow;
 };
 
 type WindowsGpuMetadata = {
@@ -43,13 +39,18 @@ export interface GpuSampler {
   reset(): void;
 }
 
-export function createGpuSampler(displayConfig: GpuDisplayConfig): GpuSampler {
+type GpuSamplerOptions = {
+  windowsBackend?: WindowsGpuBackend;
+};
+
+export function createGpuSampler(displayConfig: GpuDisplayConfig, options: GpuSamplerOptions = {}): GpuSampler {
   let backendPromise: Promise<GpuBackend> | undefined;
   let cachedMemoryByDeviceId = new Map<string, Pick<GpuDeviceSample, 'memoryUsedBytes' | 'memoryTotalBytes' | 'memoryPercent'>>();
   let nextMemoryRefreshAt = 0;
   let cachedSample: GpuAggregateSample | undefined;
   let windowsMetadataPromise: Promise<WindowsGpuMetadata[]> | undefined;
   const linuxBackendAvailability = new Map<LinuxGpuBackend, Promise<boolean>>();
+  const windowsBackend = options.windowsBackend ?? 'typeperf';
 
   function isLinuxBackendAvailable(backend: LinuxGpuBackend): Promise<boolean> {
     const cachedAvailability = linuxBackendAvailability.get(backend);
@@ -131,7 +132,7 @@ export function createGpuSampler(displayConfig: GpuDisplayConfig): GpuSampler {
         switch (backend) {
           case 'windows-counters':
             windowsMetadataPromise ??= readWindowsGpuMetadata().catch(() => []);
-            cachedSample = await readWindowsGpuSample(cachedSample, windowsMetadataPromise, displayConfig) ?? cachedSample;
+            cachedSample = await readWindowsGpuSample(cachedSample, windowsMetadataPromise, displayConfig, windowsBackend) ?? cachedSample;
             return cachedSample;
           case 'linux-nvidia-smi':
           case 'linux-rocm-smi':
@@ -192,9 +193,10 @@ async function readWindowsGpuSample(
   previousSample: GpuAggregateSample | undefined,
   windowsMetadataPromise: Promise<WindowsGpuMetadata[]>,
   displayConfig: GpuDisplayConfig,
+  windowsBackend: WindowsGpuBackend,
 ): Promise<GpuAggregateSample | undefined> {
   const [counterSnapshot, metadataEntries] = await Promise.all([
-    readWindowsCounterSnapshot(),
+    readWindowsCounterSnapshot(windowsBackend),
     windowsMetadataPromise,
   ]);
   const utilizationRows = counterSnapshot.utilizationRows;
@@ -515,31 +517,68 @@ function extractWindowsGpuDeviceId(instanceName: string): string | undefined {
   return match?.[0];
 }
 
-async function readWindowsCounterSnapshot(): Promise<{
+async function readWindowsCounterSnapshot(windowsBackend: WindowsGpuBackend): Promise<{
+  utilizationRows: GpuCounterSampleRow[];
+  memoryRows: GpuCounterSampleRow[];
+}> {
+  switch (windowsBackend) {
+    case 'powershell':
+      return await readWindowsPowerShellCounterSnapshot();
+    case 'typeperf':
+      return await readWindowsTypeperfCounterSnapshot();
+  }
+}
+
+async function readWindowsTypeperfCounterSnapshot(): Promise<{
+  utilizationRows: GpuCounterSampleRow[];
+  memoryRows: GpuCounterSampleRow[];
+}> {
+  const { stdout } = await execFileAsync(
+    'typeperf.exe',
+    [
+      '\\GPU Engine(*)\\Utilization Percentage',
+      '\\GPU Adapter Memory(*)\\Dedicated Usage',
+      '-sc',
+      '1',
+    ],
+    { timeout: WINDOWS_GPU_COMMAND_TIMEOUT_MS, maxBuffer: WINDOWS_GPU_COUNTER_MAX_BUFFER_BYTES },
+  );
+
+  return parseWindowsTypeperfCounterSnapshot(stdout);
+}
+
+async function readWindowsPowerShellCounterSnapshot(): Promise<{
   utilizationRows: GpuCounterSampleRow[];
   memoryRows: GpuCounterSampleRow[];
 }> {
   const script = [
-    'function Convert-GpuCounterSamples {',
-    '  param($samples)',
-    '  $samples | ForEach-Object {',
-    '    $instanceName = [string]$_.InstanceName',
-    "    if ($instanceName -match '(luid_[^_]+_[^_]+_phys_\\d+)') {",
-    '      [PSCustomObject]@{',
-    '        DeviceId = $Matches[1]',
-    '        CookedValue = [double]$_.CookedValue',
-    '      }',
+    '$culture = [System.Globalization.CultureInfo]::InvariantCulture',
+    '$comparison = [System.StringComparison]::OrdinalIgnoreCase',
+    '$utilization = @{}',
+    '$memory = @{}',
+    "$samples = (Get-Counter @('\\GPU Engine(*)\\Utilization Percentage', '\\GPU Adapter Memory(*)\\Dedicated Usage')).CounterSamples",
+    'foreach ($sample in $samples) {',
+    '  $instanceName = [string]$sample.InstanceName',
+    "  if ($instanceName -notmatch '(luid_[^_]+_[^_]+_phys_\\d+)') { continue }",
+    '  $deviceId = $Matches[1]',
+    '  $value = [double]$sample.CookedValue',
+    '  $path = [string]$sample.Path',
+    "  if ($path.EndsWith('\\utilization percentage', $comparison)) {",
+    '    if (-not $utilization.ContainsKey($deviceId) -or $value -gt $utilization[$deviceId]) {',
+    '      $utilization[$deviceId] = $value',
     '    }',
-    '  } | Group-Object DeviceId | ForEach-Object {',
-    '    [PSCustomObject]@{',
-    '      InstanceName = $_.Name',
-    '      CookedValue = [double](($_.Group | Measure-Object -Property CookedValue -Maximum).Maximum)',
+    "  } elseif ($path.EndsWith('\\dedicated usage', $comparison)) {",
+    '    if (-not $memory.ContainsKey($deviceId) -or $value -gt $memory[$deviceId]) {',
+    '      $memory[$deviceId] = $value',
     '    }',
     '  }',
     '}',
-    "$util = Convert-GpuCounterSamples ((Get-Counter '\\GPU Engine(*)\\Utilization Percentage').CounterSamples)",
-    "$memory = Convert-GpuCounterSamples ((Get-Counter '\\GPU Adapter Memory(*)\\Dedicated Usage').CounterSamples)",
-    '[PSCustomObject]@{ Utilization = $util; Memory = $memory } | ConvertTo-Json -Compress -Depth 4',
+    'foreach ($entry in $utilization.GetEnumerator()) {',
+    '  "u`t{0}`t{1}" -f $entry.Key, ([double]$entry.Value).ToString($culture)',
+    '}',
+    'foreach ($entry in $memory.GetEnumerator()) {',
+    '  "m`t{0}`t{1}" -f $entry.Key, ([double]$entry.Value).ToString($culture)',
+    '}',
   ].join('\n');
   const { stdout } = await execFileAsync(
     'powershell.exe',
@@ -555,12 +594,127 @@ async function readWindowsCounterSnapshot(): Promise<{
     };
   }
 
-  const parsed = JSON.parse(raw) as GpuCounterSnapshot;
+  return parseWindowsCounterSnapshotOutput(raw);
+}
+
+function parseWindowsTypeperfCounterSnapshot(raw: string): {
+  utilizationRows: GpuCounterSampleRow[];
+  memoryRows: GpuCounterSampleRow[];
+} {
+  const csvRows = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('"'))
+    .map(parseCsvLine)
+    .filter((row) => row.length > 1);
+
+  if (csvRows.length < 2) {
+    return { utilizationRows: [], memoryRows: [] };
+  }
+
+  const header = csvRows[0];
+  const sample = csvRows[csvRows.length - 1];
+  const utilizationByDeviceId = new Map<string, number>();
+  const memoryByDeviceId = new Map<string, number>();
+
+  for (let index = 1; index < Math.min(header.length, sample.length); index += 1) {
+    const counterPath = header[index];
+    const normalizedCounterPath = counterPath.toLowerCase();
+    const deviceId = extractWindowsGpuDeviceId(counterPath);
+
+    if (!deviceId) {
+      continue;
+    }
+
+    const value = Number(sample[index]);
+
+    if (!Number.isFinite(value)) {
+      continue;
+    }
+
+    if (normalizedCounterPath.endsWith('\\utilization percentage')) {
+      const current = utilizationByDeviceId.get(deviceId) ?? 0;
+      utilizationByDeviceId.set(deviceId, Math.max(current, value));
+    } else if (normalizedCounterPath.endsWith('\\dedicated usage')) {
+      const current = memoryByDeviceId.get(deviceId) ?? 0;
+      memoryByDeviceId.set(deviceId, Math.max(current, value));
+    }
+  }
 
   return {
-    utilizationRows: toArray(parsed.Utilization),
-    memoryRows: toArray(parsed.Memory),
+    utilizationRows: mapWindowsCounterRows(utilizationByDeviceId),
+    memoryRows: mapWindowsCounterRows(memoryByDeviceId),
   };
+}
+
+function parseWindowsCounterSnapshotOutput(raw: string): {
+  utilizationRows: GpuCounterSampleRow[];
+  memoryRows: GpuCounterSampleRow[];
+} {
+  const utilizationRows: GpuCounterSampleRow[] = [];
+  const memoryRows: GpuCounterSampleRow[] = [];
+
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmedLine = line.trim();
+
+    if (!trimmedLine) {
+      continue;
+    }
+
+    const [kind, instanceName, cookedValueText] = trimmedLine.split('\t');
+    const cookedValue = Number(cookedValueText);
+
+    if (!instanceName || !Number.isFinite(cookedValue)) {
+      continue;
+    }
+
+    const row = {
+      InstanceName: instanceName,
+      CookedValue: cookedValue,
+    };
+
+    if (kind === 'u') {
+      utilizationRows.push(row);
+    } else if (kind === 'm') {
+      memoryRows.push(row);
+    }
+  }
+
+  return { utilizationRows, memoryRows };
+}
+
+function mapWindowsCounterRows(valuesByDeviceId: Map<string, number>): GpuCounterSampleRow[] {
+  return [...valuesByDeviceId.entries()].map(([InstanceName, CookedValue]) => ({
+    InstanceName,
+    CookedValue,
+  }));
+}
+
+function parseCsvLine(line: string): string[] {
+  const values: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+
+    if (character === '"') {
+      if (inQuotes && line[index + 1] === '"') {
+        current += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (character === ',' && !inQuotes) {
+      values.push(current);
+      current = '';
+    } else {
+      current += character;
+    }
+  }
+
+  values.push(current);
+  return values;
 }
 
 function mergeWindowsCounterRows(

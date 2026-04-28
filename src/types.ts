@@ -28,6 +28,8 @@ export type GpuDeviceCategory = 'integrated' | 'discrete' | 'unknown';
 
 export type GpuSummaryMode = 'auto' | 'discrete' | 'integrated' | 'selected';
 
+export type WindowsGpuBackend = 'typeperf' | 'powershell';
+
 export type GpuDisplayConfig = {
   summaryMode: GpuSummaryMode;
   selectedDeviceMatchers: string[];
