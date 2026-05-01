@@ -43,6 +43,7 @@ export interface StatusBarManager {
   updateMemoryTooltip(): void;
   updateGpuTooltip(gpu?: GpuAggregateSample): void;
   updateDiskTooltip(disk?: DiskSample): void;
+  updateNetworkTooltip(network?: NetworkSample): void;
   setEnabledMonitors(enabledMonitors: EnabledMonitors): void;
   setDiskTargetPath(diskTargetPath: string): void;
   getLatestMetrics(): { cpuPercent: number; memoryPercent: number; memoryUsedBytes: number };
@@ -267,7 +268,7 @@ export function createStatusBarManager(): StatusBarManager {
           }
 
           networkStatusBarItem.command = undefined;
-          networkStatusBarItem.tooltip = undefined;
+          this.updateNetworkTooltip(sample.network);
           networkStatusBarItem.show();
         } else {
           networkStatusBarItem.hide();
@@ -382,6 +383,20 @@ export function createStatusBarManager(): StatusBarManager {
           `Warning threshold: ${formatWarningThresholdPercent(thresholds.diskPercent)}`,
         ].join('\n\n'),
       );
+    },
+
+    updateNetworkTooltip(network?: NetworkSample) {
+      if (!network) {
+        networkStatusBarItem.tooltip = undefined;
+        return;
+      }
+      const lines = [
+        '**Network**',
+        '',
+        `Interface: ${network.interfaceName}${network.interfaceDescription ? ` (${network.interfaceDescription})` : ''}`,
+      ];
+
+      networkStatusBarItem.tooltip = new vscode.MarkdownString(lines.join('\n\n'));
     },
 
     setEnabledMonitors(nextEnabledMonitors: EnabledMonitors) {

@@ -4,6 +4,12 @@ All notable changes to the "Moba Status Bar" extension will be documented in thi
 
 <!-- markdownlint-disable MD024 -->
 
+## [1.3.5] - 2026-05-01
+
+### Changed
+
+- Added network adapter description to the network status bar tooltip.
+
 ## [1.3.4] - 2026-04-28
 
 ### Added

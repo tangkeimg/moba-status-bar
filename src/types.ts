@@ -84,6 +84,7 @@ export type DiskSample = {
 
 export type NetworkSample = {
   interfaceName: string;
+  interfaceDescription?: string;
   downloadBytesPerSecond: number;
   uploadBytesPerSecond: number;
 };

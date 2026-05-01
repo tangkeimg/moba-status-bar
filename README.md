@@ -147,7 +147,6 @@ The GPU display mode, selected devices, and category overrides are stored intern
 - Process lists are collected only when you open them.
 - On Windows, process data is collected through PowerShell/CIM. On macOS and Linux, it is collected through `ps`.
 - GPU monitoring supports multiple GPUs in a single item. The tooltip expands every detected device and degrades gracefully when VRAM totals are unavailable or fresh GPU telemetry cannot be read.
-- The GPU configuration command stores exact detected device ids when you pick GPUs interactively, so users normally do not need to know or type the raw GPU names themselves.
 - MobaXterm was a major inspiration for this extension. I have been a long-time fan of their work, and this plugin would not exist in its current form without that influence.
 
 ## License

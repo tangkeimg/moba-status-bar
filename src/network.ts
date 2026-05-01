@@ -15,6 +15,7 @@ type NetworkBackend = 'windows-netadapter' | 'linux-procfs' | 'none';
 
 type NetworkCounterRow = {
   interfaceName: string;
+  interfaceDescription?: string;
   downloadBytes: number;
   uploadBytes: number;
 };
@@ -26,6 +27,7 @@ type NetworkCounterSnapshot = {
 
 type WindowsNetworkStatsRow = {
   Name?: unknown;
+  InterfaceDescription?: unknown;
   ReceivedBytes?: unknown;
   SentBytes?: unknown;
 };
@@ -110,10 +112,10 @@ async function readWindowsCounterSnapshot(): Promise<NetworkCounterSnapshot> {
       '-NoProfile',
       '-NonInteractive',
       '-Command',
-      [
+      '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ' + [
         'Get-NetAdapterStatistics',
         "Where-Object { $_.Name -and $_.ReceivedBytes -ne $null -and $_.SentBytes -ne $null }",
-        'Select-Object Name,ReceivedBytes,SentBytes',
+        'Select-Object Name,InterfaceDescription,ReceivedBytes,SentBytes',
         'ConvertTo-Json -Compress',
       ].join(' | '),
     ],
@@ -121,20 +123,27 @@ async function readWindowsCounterSnapshot(): Promise<NetworkCounterSnapshot> {
   );
 
   const rows = parseJsonRows<WindowsNetworkStatsRow>(stdout)
-    .map((row) => {
-      const interfaceName = typeof row.Name === 'string' ? row.Name.trim() : '';
-      const downloadBytes = normalizeCounterValue(row.ReceivedBytes);
-      const uploadBytes = normalizeCounterValue(row.SentBytes);
+    .map((entry) => {
+      const interfaceName = typeof entry.Name === 'string' ? entry.Name.trim() : '';
+      const interfaceDescription = typeof entry.InterfaceDescription === 'string' ? entry.InterfaceDescription.trim() : undefined;
+      const downloadBytes = normalizeCounterValue(entry.ReceivedBytes);
+      const uploadBytes = normalizeCounterValue(entry.SentBytes);
 
       if (!interfaceName || !Number.isFinite(downloadBytes) || !Number.isFinite(uploadBytes) || isIgnoredNetworkInterface(interfaceName)) {
         return undefined;
       }
 
-      return {
+      const result: NetworkCounterRow = {
         interfaceName,
         downloadBytes,
         uploadBytes,
-      } satisfies NetworkCounterRow;
+      };
+
+      if (interfaceDescription) {
+        result.interfaceDescription = interfaceDescription;
+      }
+
+      return result;
     })
     .filter((row): row is NetworkCounterRow => row !== undefined);
 
@@ -208,6 +217,7 @@ function createNetworkSample(
 
     return {
       interfaceName: row.interfaceName,
+      interfaceDescription: row.interfaceDescription,
       downloadBytesPerSecond: 0,
       uploadBytesPerSecond: 0,
     };
@@ -223,11 +233,17 @@ function createNetworkSample(
         return undefined;
       }
 
-      return {
+      const sample: NetworkSample = {
         interfaceName: row.interfaceName,
         downloadBytesPerSecond: Math.max(0, row.downloadBytes - previousRow.downloadBytes) / elapsedSeconds,
         uploadBytesPerSecond: Math.max(0, row.uploadBytes - previousRow.uploadBytes) / elapsedSeconds,
-      } satisfies NetworkSample;
+      };
+
+      if (row.interfaceDescription) {
+        sample.interfaceDescription = row.interfaceDescription;
+      }
+
+      return sample;
     })
     .filter((sample): sample is NetworkSample => sample !== undefined);
 
@@ -240,6 +256,7 @@ function createNetworkSample(
 
     return {
       interfaceName: row.interfaceName,
+      interfaceDescription: row.interfaceDescription,
       downloadBytesPerSecond: 0,
       uploadBytesPerSecond: 0,
     };
