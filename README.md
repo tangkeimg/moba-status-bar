@@ -53,7 +53,7 @@ After installation, the extension starts automatically when VS Code finishes lau
 | `$(server)` Memory | Used memory / total memory | Click to show top memory processes |
 | `$(device-desktop)` GPU | Auto-selected GPU summary usage and VRAM when available; hover to inspect grouped per-GPU details | Click to configure detected GPUs; hover to inspect grouped per-GPU usage and VRAM data |
 | `$(archive)` Disk | Workspace disk label and usage percentage | Hover to view target path and usage |
-| `$(arrow-down)` Network | Current fixed-width download speed; hidden by default and optional upload speed can be enabled in settings | No action |
+| `$(arrow-down)` Network | Current fixed-width download speed; hidden by default and optional upload speed can be enabled in settings | Hover to view network adapter name and description |
 
 ## GPU Platform Support
 
