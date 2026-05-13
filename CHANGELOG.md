@@ -4,6 +4,13 @@ All notable changes to the "Moba Status Bar" extension will be documented in thi
 
 <!-- markdownlint-disable MD024 -->
 
+## [Unreleased]
+
+### Changed
+
+- GPU monitoring is now disabled by default. Enable `mobaStatusBar.gpuEnabled` in settings if needed.
+- Default refresh interval adjusted from 1000ms to 1578ms.
+
 ## [1.3.5] - 2026-05-01
 
 ### Changed
