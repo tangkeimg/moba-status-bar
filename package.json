@@ -1,27 +1,19 @@
 {
   "name": "moba-status-bar",
-  "displayName": "Moba Status Bar",
-  "description": "CPU, GPU, memory, disk, and network usage monitor with a compact trend graph in the VS Code status bar.",
+  "displayName": "Moba Status Bar: CPU MEM DISK Monitor",
+  "description": "Compact CPU, Memory (MEM), and Disk (DISK) usage monitor with real-time trend graphs in the VS Code status bar. Supports GPU and Network tracking.",
   "keywords": [
     "cpu monitor",
-    "gpu monitor",
     "memory monitor",
     "disk usage",
-    "network monitor",
-    "download speed",
     "status bar",
-    "system monitor",
     "resource monitor",
     "performance monitor",
-    "vscode status bar",
     "cpu usage",
     "memory usage",
     "cpu",
-    "gpu",
     "memory",
-    "disk",
-    "network",
-    "monitor"
+    "disk"
   ],
   "version": "1.3.5",
   "publisher": "tangkeimg",
@@ -104,7 +96,7 @@
         },
         "mobaStatusBar.gpuEnabled": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "order": 6,
           "description": "Enable GPU monitoring. When disabled, GPU sampling is not collected."
         },
@@ -158,7 +150,7 @@
         },
         "mobaStatusBar.refreshIntervalMs": {
           "type": "number",
-          "default": 1000,
+          "default": 1578,
           "minimum": 500,
           "order": 13,
           "description": "How often enabled live monitors should refresh, in milliseconds."
