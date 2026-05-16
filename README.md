@@ -27,7 +27,7 @@ Keep system resource usage visible at all times without leaving your editor. Mob
 
 ## Quick Start
 
-Install the extension and CPU, GPU, memory, and disk usage will appear automatically in the status bar when supported by your machine and platform. Network monitoring is available, but stays hidden until you enable it in settings.
+Install the extension and CPU, memory, and disk usage will appear automatically in the status bar when supported by your machine and platform. GPU and network monitoring are available, but stay hidden until you enable them in settings.
 
 No setup required. Customize behavior later in Settings if needed.
 
@@ -86,6 +86,7 @@ Open the Command Palette with `Ctrl+Shift+P` / `Cmd+Shift+P` and run:
 | `Moba Status Bar: Show Top CPU Processes` | Shows the top 5 CPU-consuming processes. |
 | `Moba Status Bar: Show Top Memory Processes` | Shows the top 5 memory-consuming processes. |
 | `Moba Status Bar: Configure GPU Display` | Opens a picker for detected GPUs so you can change the GPU summary mode, choose zero or more GPUs, or override a GPU category without typing device names manually. |
+| `Moba Status Bar: Refresh Now` | Refreshes all currently enabled status bar monitors immediately. |
 
 ## Settings
 
@@ -99,14 +100,14 @@ You can configure Moba Status Bar from VS Code settings.
 | `mobaStatusBar.cpuTrendGraphLength` | `6` | Number of samples shown in the CPU trend graph. |
 | `mobaStatusBar.memoryEnabled` | `true` | Enable memory monitoring. When disabled, memory usage is not sampled. |
 | `mobaStatusBar.memoryWarningThresholdPercent` | `90` | Highlight the memory item when memory usage is at or above this percentage. |
-| `mobaStatusBar.gpuEnabled` | `true` | Enable GPU monitoring. When disabled, GPU sampling is not collected. |
+| `mobaStatusBar.gpuEnabled` | `false` | Enable GPU monitoring. When disabled, GPU sampling is not collected. |
 | `mobaStatusBar.windowsGpuBackend` | `typeperf` | Windows GPU sampling backend. `typeperf` avoids PowerShell CPU spikes but requires `typeperf.exe`; `powershell` can be used as an opt-in fallback with higher sampling cost. |
 | `mobaStatusBar.gpuWarningThresholdPercent` | `90` | Highlight the GPU item when GPU usage is at or above this percentage. |
 | `mobaStatusBar.diskEnabled` | `true` | Enable disk monitoring. When disabled, disk usage is not sampled. |
 | `mobaStatusBar.diskWarningThresholdPercent` | `85` | Highlight the disk item when disk usage is at or above this percentage. |
 | `mobaStatusBar.networkEnabled` | `false` | Enable network monitoring. Disabled by default so the network item stays hidden unless you opt in. |
 | `mobaStatusBar.showNetworkUpload` | `false` | Show upload speed alongside download speed in the network item. |
-| `mobaStatusBar.refreshIntervalMs` | `1000` | Enabled monitor refresh interval in milliseconds. Values below `500` are clamped to `500`. |
+| `mobaStatusBar.refreshIntervalMs` | `1578` | Enabled monitor refresh interval in milliseconds. Values below `500` are clamped to `500`. |
 | `mobaStatusBar.alignment` | `right` | Place the status bar items on the `left` or `right` side of the VS Code status bar. Changes apply immediately without reloading VS Code. |
 | `mobaStatusBar.enabled` | `true` | Enable or disable the status bar monitor. |
 
@@ -120,7 +121,7 @@ Example `settings.json`:
   "mobaStatusBar.cpuTrendGraphLength": 6,
   "mobaStatusBar.memoryEnabled": true,
   "mobaStatusBar.memoryWarningThresholdPercent": 90,
-  "mobaStatusBar.gpuEnabled": true,
+  "mobaStatusBar.gpuEnabled": false,
   "mobaStatusBar.windowsGpuBackend": "typeperf",
   "mobaStatusBar.gpuWarningThresholdPercent": 90,
   "mobaStatusBar.diskEnabled": true,

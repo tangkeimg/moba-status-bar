@@ -47,6 +47,10 @@
       {
         "command": "mobaStatusBar.configureGpuDisplay",
         "title": "Moba Status Bar: Configure GPU Display"
+      },
+      {
+        "command": "mobaStatusBar.refreshNow",
+        "title": "Moba Status Bar: Refresh Now"
       }
     ],
     "configuration": {

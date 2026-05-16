@@ -6,6 +6,10 @@ All notable changes to the "Moba Status Bar" extension will be documented in thi
 
 ## [Unreleased]
 
+### Added
+
+- Added `Moba Status Bar: Refresh Now` to refresh all currently enabled monitors on demand.
+
 ### Changed
 
 - GPU monitoring is now disabled by default. Enable `mobaStatusBar.gpuEnabled` in settings if needed.

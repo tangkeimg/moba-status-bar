@@ -1,6 +1,6 @@
 import * as os from 'node:os';
 import * as vscode from 'vscode';
-import { CONFIG_SECTION, CONFIGURE_GPU_DISPLAY_COMMAND, SHOW_CPU_PROCESSES_COMMAND, SHOW_MEMORY_PROCESSES_COMMAND } from './constants.js';
+import { CONFIG_SECTION, CONFIGURE_GPU_DISPLAY_COMMAND, REFRESH_NOW_COMMAND, SHOW_CPU_PROCESSES_COMMAND, SHOW_MEMORY_PROCESSES_COMMAND } from './constants.js';
 import { initializeGpuDisplayConfigStorage, isExtensionEnabled, readEnabledMonitors, readGpuDisplayConfig, readRefreshIntervalMs, readWindowsGpuBackend } from './config.js';
 import { sampleCpuPercent } from './cpu.js';
 import { sampleMemory } from './memory.js';
@@ -65,6 +65,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(SHOW_CPU_PROCESSES_COMMAND, () => commandHandlers!.showTopCpuProcesses()),
     vscode.commands.registerCommand(SHOW_MEMORY_PROCESSES_COMMAND, () => commandHandlers!.showTopMemoryProcesses()),
     vscode.commands.registerCommand(CONFIGURE_GPU_DISPLAY_COMMAND, () => commandHandlers!.configureGpuDisplay()),
+    vscode.commands.registerCommand(REFRESH_NOW_COMMAND, () => refreshNow()),
   );
 
   context.subscriptions.push(
@@ -89,6 +90,15 @@ export function deactivate(): void {
   diskSampler = undefined;
   networkSampler = undefined;
   commandHandlers = undefined;
+}
+
+function refreshNow(): void {
+  if (!isExtensionEnabled()) {
+    statusBarManager?.hide();
+    return;
+  }
+
+  void updateStatusBar();
 }
 
 function applyConfiguration(): void {
