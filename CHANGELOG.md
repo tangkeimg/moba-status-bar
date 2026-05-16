@@ -6,6 +6,8 @@ All notable changes to the "Moba Status Bar" extension will be documented in thi
 
 ## [Unreleased]
 
+## [1.3.7] - 2026-05-16
+
 ### Added
 
 - Added `Moba Status Bar: Refresh Now` to refresh all currently enabled monitors on demand.
