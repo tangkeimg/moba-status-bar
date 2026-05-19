@@ -6,6 +6,14 @@ All notable changes to the "Moba Status Bar" extension will be documented in thi
 
 ## [Unreleased]
 
+## [1.3.8] - 2026-05-19
+
+### Changed
+
+- Cached status bar display settings on configuration changes to avoid repeated configuration reads during refreshes.
+- Updated memory tooltip contents from the latest memory sample so hover details stay in sync with the status bar.
+- Reduced redundant status bar background updates by only applying warning colors when warning state changes.
+
 ## [1.3.7] - 2026-05-16
 
 ### Added
