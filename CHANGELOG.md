@@ -4,7 +4,12 @@ All notable changes to the "Moba Status Bar" extension will be documented in thi
 
 <!-- markdownlint-disable MD024 -->
 
-## [Unreleased]
+## [1.4.0] - 2026-06-10
+
+### Added
+
+- Added `mobaStatusBar.diskTargetPath` so disk monitoring can track a custom disk, folder, or mount path instead of only the automatic workspace/home target.
+- Added `Moba Status Bar: Configure Disk Target` and made the disk status bar item clickable for switching between the automatic disk target and a custom path.
 
 ## [1.3.8] - 2026-05-19
 

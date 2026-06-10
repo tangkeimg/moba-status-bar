@@ -6,6 +6,7 @@ import {
   DEFAULT_GPU_MONITOR_ENABLED,
   DEFAULT_GPU_WARNING_THRESHOLD_PERCENT,
   DEFAULT_DISK_MONITOR_ENABLED,
+  DEFAULT_DISK_TARGET_PATH,
   DEFAULT_NETWORK_MONITOR_ENABLED,
   DEFAULT_MEMORY_WARNING_THRESHOLD_PERCENT,
   DEFAULT_DISK_WARNING_THRESHOLD_PERCENT,
@@ -82,6 +83,12 @@ export function readCpuTrendGraphConfig(): CpuTrendGraphConfig {
 export function readShowNetworkUpload(): boolean {
   const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
   return config.get<boolean>('showNetworkUpload', DEFAULT_SHOW_NETWORK_UPLOAD);
+}
+
+export function readDiskTargetPath(): string | undefined {
+  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+  const diskTargetPath = config.get<string>('diskTargetPath', DEFAULT_DISK_TARGET_PATH).trim();
+  return diskTargetPath || undefined;
 }
 
 export function readEnabledMonitors(): EnabledMonitors {

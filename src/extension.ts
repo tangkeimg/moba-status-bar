@@ -1,7 +1,8 @@
 import * as os from 'node:os';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { CONFIG_SECTION, CONFIGURE_GPU_DISPLAY_COMMAND, REFRESH_NOW_COMMAND, SHOW_CPU_PROCESSES_COMMAND, SHOW_MEMORY_PROCESSES_COMMAND } from './constants.js';
-import { initializeGpuDisplayConfigStorage, isExtensionEnabled, readEnabledMonitors, readGpuDisplayConfig, readRefreshIntervalMs, readWindowsGpuBackend } from './config.js';
+import { CONFIG_SECTION, CONFIGURE_DISK_TARGET_COMMAND, CONFIGURE_GPU_DISPLAY_COMMAND, REFRESH_NOW_COMMAND, SHOW_CPU_PROCESSES_COMMAND, SHOW_MEMORY_PROCESSES_COMMAND } from './constants.js';
+import { initializeGpuDisplayConfigStorage, isExtensionEnabled, readDiskTargetPath, readEnabledMonitors, readGpuDisplayConfig, readRefreshIntervalMs, readWindowsGpuBackend } from './config.js';
 import { sampleCpuPercent } from './cpu.js';
 import { sampleMemory } from './memory.js';
 import { createGpuSampler } from './gpu.js';
@@ -60,11 +61,14 @@ export function activate(context: vscode.ExtensionContext): void {
       return latestGpuSample;
     },
     () => applyConfiguration(),
+    () => getAutomaticDiskTargetPath(),
+    () => applyConfiguration(),
   );
   context.subscriptions.push(
     vscode.commands.registerCommand(SHOW_CPU_PROCESSES_COMMAND, () => commandHandlers!.showTopCpuProcesses()),
     vscode.commands.registerCommand(SHOW_MEMORY_PROCESSES_COMMAND, () => commandHandlers!.showTopMemoryProcesses()),
     vscode.commands.registerCommand(CONFIGURE_GPU_DISPLAY_COMMAND, () => commandHandlers!.configureGpuDisplay()),
+    vscode.commands.registerCommand(CONFIGURE_DISK_TARGET_COMMAND, () => commandHandlers!.configureDiskTarget()),
     vscode.commands.registerCommand(REFRESH_NOW_COMMAND, () => refreshNow()),
   );
 
@@ -139,7 +143,7 @@ function applyConfiguration(): void {
   }
 
   if (enabledMonitors.disk) {
-    const diskTargetPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
+    const diskTargetPath = resolveDiskTargetPath();
     statusBarManager?.setDiskTargetPath(diskTargetPath);
     diskSampler = createDiskSampler(diskTargetPath);
     statusBarManager?.updateDiskTooltip();
@@ -163,6 +167,32 @@ function stopRefreshing(): void {
     clearInterval(refreshTimer);
     refreshTimer = undefined;
   }
+}
+
+function resolveDiskTargetPath(): string {
+  const configuredDiskTargetPath = readDiskTargetPath();
+
+  if (configuredDiskTargetPath) {
+    return expandHomeDirectory(configuredDiskTargetPath);
+  }
+
+  return getAutomaticDiskTargetPath();
+}
+
+function getAutomaticDiskTargetPath(): string {
+  return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
+}
+
+function expandHomeDirectory(targetPath: string): string {
+  if (targetPath === '~') {
+    return os.homedir();
+  }
+
+  if (targetPath.startsWith('~/') || targetPath.startsWith('~\\')) {
+    return path.join(os.homedir(), targetPath.slice(2));
+  }
+
+  return targetPath;
 }
 
 async function updateStatusBar(): Promise<void> {

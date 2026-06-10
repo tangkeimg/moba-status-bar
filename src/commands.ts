@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { TOP_CPU_PROCESS_COUNT, TOP_MEMORY_PROCESS_COUNT, RANK_LABELS } from './constants.js';
+import { CONFIG_SECTION, TOP_CPU_PROCESS_COUNT, TOP_MEMORY_PROCESS_COUNT, RANK_LABELS } from './constants.js';
 import { readGpuDisplayConfig, writeGpuDisplayConfig } from './config.js';
 import { gpuDeviceMatchesMatcher } from './gpu.js';
 import { readTopCpuProcesses, readTopMemoryProcesses } from './processes.js';
@@ -15,6 +15,7 @@ import {
 } from './utils.js';
 
 type GpuConfigurationAction = 'set-mode' | 'select-devices' | 'override-category' | 'clear-category-overrides';
+type DiskTargetAction = 'automatic' | 'custom';
 
 type GpuConfigurationQuickPickItem = vscode.QuickPickItem & {
   action: GpuConfigurationAction;
@@ -32,20 +33,29 @@ type GpuCategoryQuickPickItem = vscode.QuickPickItem & {
   isCurrent?: boolean;
 };
 
+type DiskTargetQuickPickItem = vscode.QuickPickItem & {
+  action: DiskTargetAction;
+  isCurrent?: boolean;
+};
+
 export interface CommandHandlers {
   showTopCpuProcesses(): Promise<void>;
   showTopMemoryProcesses(): Promise<void>;
   configureGpuDisplay(): Promise<void>;
+  configureDiskTarget(): Promise<void>;
 }
 
 export function createCommandHandlers(
   getLatestMetrics: () => { cpuPercent: number; memoryPercent: number; memoryUsedBytes: number },
   readLatestGpu: () => Promise<GpuAggregateSample | undefined>,
   onGpuDisplayConfigChanged: () => void,
+  getAutomaticDiskTargetPath: () => string,
+  onDiskTargetChanged: () => void,
 ): CommandHandlers {
   let cpuProcessesCommandInProgress = false;
   let memoryProcessesCommandInProgress = false;
   let gpuConfigurationCommandInProgress = false;
+  let diskTargetCommandInProgress = false;
 
   return {
     async showTopCpuProcesses() {
@@ -166,7 +176,81 @@ export function createCommandHandlers(
         gpuConfigurationCommandInProgress = false;
       }
     },
+
+    async configureDiskTarget() {
+      if (diskTargetCommandInProgress) {
+        return;
+      }
+
+      diskTargetCommandInProgress = true;
+
+      try {
+        const configuredPath = readConfiguredDiskTargetPath();
+        const action = await showSingleSelectQuickPick(buildDiskTargetItems(configuredPath, getAutomaticDiskTargetPath()), {
+          title: 'Configure Disk Target',
+          placeHolder: 'Choose which disk or mount path the status bar should monitor.',
+        });
+
+        if (!action) {
+          return;
+        }
+
+        if (action.action === 'automatic') {
+          await writeDiskTargetPath('', onDiskTargetChanged);
+          return;
+        }
+
+        const nextPath = await vscode.window.showInputBox({
+          title: 'Set Disk Monitor Target',
+          prompt: `Automatic target: ${getAutomaticDiskTargetPath()}. Enter a folder, drive, or mount path. Leave empty to use automatic.`,
+          placeHolder: process.platform === 'win32' ? 'C:\\' : '/mnt/data',
+          value: configuredPath,
+        });
+
+        if (nextPath === undefined) {
+          return;
+        }
+
+        await writeDiskTargetPath(nextPath.trim(), onDiskTargetChanged);
+      } finally {
+        diskTargetCommandInProgress = false;
+      }
+    },
   };
+}
+
+function buildDiskTargetItems(configuredPath: string, automaticPath: string): DiskTargetQuickPickItem[] {
+  return [
+    {
+      label: 'Automatic Target',
+      description: configuredPath ? undefined : 'Current',
+      detail: `Use the first workspace folder, or home directory without a workspace. Current target: ${automaticPath}`,
+      action: 'automatic',
+      isCurrent: !configuredPath,
+    },
+    {
+      label: 'Custom Path...',
+      description: configuredPath ? `Current: ${configuredPath}` : undefined,
+      detail: 'Monitor a specific folder, drive, or mount path instead of the automatic workspace/home target.',
+      action: 'custom',
+      isCurrent: Boolean(configuredPath),
+    },
+  ];
+}
+
+function readConfiguredDiskTargetPath(): string {
+  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+  return config.get<string>('diskTargetPath', '').trim();
+}
+
+async function writeDiskTargetPath(diskTargetPath: string, onDiskTargetChanged: () => void): Promise<void> {
+  const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+  const target = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0
+    ? vscode.ConfigurationTarget.Workspace
+    : vscode.ConfigurationTarget.Global;
+
+  await config.update('diskTargetPath', diskTargetPath, target);
+  onDiskTargetChanged();
 }
 
 function buildGpuConfigurationItems(displayConfig: GpuDisplayConfig): GpuConfigurationQuickPickItem[] {

@@ -15,7 +15,7 @@
     "memory",
     "disk"
   ],
-  "version": "1.3.8",
+  "version": "1.4.0",
   "publisher": "tangkeimg",
   "license": "MIT",
   "icon": "output.png",
@@ -47,6 +47,10 @@
       {
         "command": "mobaStatusBar.configureGpuDisplay",
         "title": "Moba Status Bar: Configure GPU Display"
+      },
+      {
+        "command": "mobaStatusBar.configureDiskTarget",
+        "title": "Moba Status Bar: Configure Disk Target"
       },
       {
         "command": "mobaStatusBar.refreshNow",
@@ -140,23 +144,29 @@
           "order": 10,
           "description": "Show a warning background when disk usage is at or above this percentage."
         },
+        "mobaStatusBar.diskTargetPath": {
+          "type": "string",
+          "default": "",
+          "order": 11,
+          "description": "Disk or mount path to monitor. Leave empty to use the first workspace folder, or the home directory when no workspace is open."
+        },
         "mobaStatusBar.networkEnabled": {
           "type": "boolean",
           "default": false,
-          "order": 11,
+          "order": 12,
           "description": "Enable network monitoring. Disabled by default so the network item stays hidden unless you opt in."
         },
         "mobaStatusBar.showNetworkUpload": {
           "type": "boolean",
           "default": false,
-          "order": 12,
+          "order": 13,
           "description": "Show upload speed alongside download speed in the network status bar item."
         },
         "mobaStatusBar.refreshIntervalMs": {
           "type": "number",
           "default": 1578,
           "minimum": 500,
-          "order": 13,
+          "order": 14,
           "description": "How often enabled live monitors should refresh, in milliseconds."
         },
         "mobaStatusBar.alignment": {
@@ -166,13 +176,13 @@
             "left",
             "right"
           ],
-          "order": 14,
+          "order": 15,
           "description": "Alignment of the Moba Status Bar in the status bar."
         },
         "mobaStatusBar.enabled": {
           "type": "boolean",
           "default": true,
-          "order": 15,
+          "order": 16,
           "description": "Enable the Moba Status Bar resource monitor."
         }
       }

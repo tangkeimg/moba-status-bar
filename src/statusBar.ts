@@ -10,6 +10,7 @@ import {
   GPU_STATUS_PRIORITY_LEFT,
   DISK_STATUS_PRIORITY_LEFT,
   NETWORK_STATUS_PRIORITY_LEFT,
+  CONFIGURE_DISK_TARGET_COMMAND,
   CONFIGURE_GPU_DISPLAY_COMMAND,
   SHOW_CPU_PROCESSES_COMMAND,
   SHOW_MEMORY_PROCESSES_COMMAND,
@@ -258,6 +259,7 @@ export function createStatusBarManager(): StatusBarManager {
         const diskStatusText = sample.disk ? `$(archive) ${formatDiskUsage(sample.disk)}` : '$(archive) --';
         diskStatusBarItem.text = diskStatusText;
         previousDiskStatusText = diskStatusText;
+        diskStatusBarItem.command = CONFIGURE_DISK_TARGET_COMMAND;
         this.updateDiskTooltip(sample.disk);
         diskStatusBarItem.show();
       }

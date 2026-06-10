@@ -19,7 +19,7 @@ Keep system resource usage visible at all times without leaving your editor. Mob
 - **Live CPU usage with trend graph** directly in the status bar
 - **GPU usage with multi-GPU tooltip**
 - **Memory usage at a glance**
-- **Disk usage for current workspace**
+- **Disk usage for current workspace or a custom path**
 - **Network download speed in one compact, stable-width item**
 - **One-click process inspection** (CPU & memory)
 - **Automatic warning highlights** when usage is high
@@ -36,7 +36,7 @@ No setup required. Customize behavior later in Settings if needed.
 - **CPU usage with trend graph**: shows real-time CPU usage with a compact trend graph in the status bar.
 - **GPU usage in the status bar**: shows an automatic GPU summary that prefers discrete GPUs when present, keeps integrated and discrete memory separate, and includes VRAM usage when available. GPU telemetry uses lightweight platform-specific backends, including Linux amdgpu sysfs support when vendor tools are unavailable, and the tooltip groups all detected GPUs by type.
 - **Memory usage in the status bar**: shows used memory and total memory, for example `8.4GB / 16.0GB`.
-- **Workspace disk usage**: shows usage for the disk that contains your first workspace folder. If no workspace is open, it uses your home directory.
+- **Workspace or custom disk usage**: shows usage for the disk that contains your first workspace folder by default. If no workspace is open, it uses your home directory. Set `mobaStatusBar.diskTargetPath` or click the disk item to monitor a custom disk, folder, or mount path.
 - **Network usage in the status bar**: shows live download speed in a compact fixed-width item when enabled. Upload speed is available as an optional setting and stays off by default to keep the status bar narrow.
 - **Top CPU processes**: click the CPU item or run the command to see the top 5 CPU-consuming processes.
 - **Top memory processes**: click the memory item or run the command to see the top 5 memory-consuming processes.
@@ -52,7 +52,7 @@ After installation, the extension starts automatically when VS Code finishes lau
 | `$(chip)` CPU | Current CPU usage trend and percentage | Click to show top CPU processes |
 | `$(server)` Memory | Used memory / total memory | Click to show top memory processes |
 | `$(device-desktop)` GPU | Auto-selected GPU summary usage and VRAM when available; hover to inspect grouped per-GPU details | Click to configure detected GPUs; hover to inspect grouped per-GPU usage and VRAM data |
-| `$(archive)` Disk | Workspace disk label and usage percentage | Hover to view target path and usage |
+| `$(archive)` Disk | Workspace or custom disk label and usage percentage | Click to configure the monitored disk target |
 | `$(arrow-down)` Network | Current fixed-width download speed; hidden by default and optional upload speed can be enabled in settings | Hover to view network adapter name and description |
 
 ## GPU Platform Support
@@ -86,6 +86,7 @@ Open the Command Palette with `Ctrl+Shift+P` / `Cmd+Shift+P` and run:
 | `Moba Status Bar: Show Top CPU Processes` | Shows the top 5 CPU-consuming processes. |
 | `Moba Status Bar: Show Top Memory Processes` | Shows the top 5 memory-consuming processes. |
 | `Moba Status Bar: Configure GPU Display` | Opens a picker for detected GPUs so you can change the GPU summary mode, choose zero or more GPUs, or override a GPU category without typing device names manually. |
+| `Moba Status Bar: Configure Disk Target` | Switches disk monitoring between the automatic workspace/home target and a custom disk, folder, or mount path. |
 | `Moba Status Bar: Refresh Now` | Refreshes all currently enabled status bar monitors immediately. |
 
 ## Settings
@@ -105,6 +106,7 @@ You can configure Moba Status Bar from VS Code settings.
 | `mobaStatusBar.gpuWarningThresholdPercent` | `90` | Highlight the GPU item when GPU usage is at or above this percentage. |
 | `mobaStatusBar.diskEnabled` | `true` | Enable disk monitoring. When disabled, disk usage is not sampled. |
 | `mobaStatusBar.diskWarningThresholdPercent` | `85` | Highlight the disk item when disk usage is at or above this percentage. |
+| `mobaStatusBar.diskTargetPath` | `""` | Disk or mount path to monitor. Leave empty to use the first workspace folder, or the home directory when no workspace is open. |
 | `mobaStatusBar.networkEnabled` | `false` | Enable network monitoring. Disabled by default so the network item stays hidden unless you opt in. |
 | `mobaStatusBar.showNetworkUpload` | `false` | Show upload speed alongside download speed in the network item. |
 | `mobaStatusBar.refreshIntervalMs` | `1578` | Enabled monitor refresh interval in milliseconds. Values below `500` are clamped to `500`. |
@@ -126,6 +128,7 @@ Example `settings.json`:
   "mobaStatusBar.gpuWarningThresholdPercent": 90,
   "mobaStatusBar.diskEnabled": true,
   "mobaStatusBar.diskWarningThresholdPercent": 80,
+  "mobaStatusBar.diskTargetPath": "",
   "mobaStatusBar.networkEnabled": false,
   "mobaStatusBar.showNetworkUpload": false,
   "mobaStatusBar.refreshIntervalMs": 1500,
@@ -148,7 +151,6 @@ The GPU display mode, selected devices, and category overrides are stored intern
 - Process lists are collected only when you open them.
 - On Windows, process data is collected through PowerShell/CIM. On macOS and Linux, it is collected through `ps`.
 - GPU monitoring supports multiple GPUs in a single item. The tooltip expands every detected device and degrades gracefully when VRAM totals are unavailable or fresh GPU telemetry cannot be read.
-- MobaXterm was a major inspiration for this extension. I have been a long-time fan of their work, and this plugin would not exist in its current form without that influence.
 
 ## License
 
